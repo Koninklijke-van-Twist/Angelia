@@ -169,6 +169,47 @@ if ($code !== 0) {
         check($snap['mode'] === 'mock' && count($snap['groups']) === 1 && count($snap['rules']) === 1, 'import-overzicht (mock)');
 }
 
+// --- bestaande handtekeningen importeren uit Exchange
+$imp = angelia_default_store();
+angelia_save_group($imp, ['name' => 'Bestaand', 'company_id' => 'kvt', 'html' => '<p>{{naam}}</p>', 'members' => 'al@kvt.nl'], 'test');
+$snapImp = [
+    'at' => time(), 'mode' => 'mock',
+    'groups' => [
+        ['name' => 'KVT-Sig-Compleet', 'members' => ['Jan@kvt.nl', 'al@kvt.nl', 'piet@kvt.nl']],
+        ['name' => 'Angelia-kvt-bestaand', 'members' => ['al@kvt.nl']],
+        ['name' => 'DE-Sig', 'members' => ['piet@kvt.nl', 'hans@kvtgermany.de']],
+    ],
+    'rules' => [
+        ['name' => 'Handtekening KVT NL - Compleet', 'enabled' => true, 'html' => "<!-- KVTSIG -->\n<p>%%DisplayName%% %%Title%% %%PhoneNumber%%</p>",
+            'from_member_of' => ['KVT-Sig-Compleet'], 'from_addresses' => [], 'domains' => ['kvt.nl']],
+        ['name' => 'Angelia-kvt-bestaand', 'enabled' => false, 'html' => '<!-- KVTSIG --><p>x</p>', 'from_member_of' => ['Angelia-kvt-bestaand'], 'domains' => ['kvt.nl']],
+        ['name' => 'DE zonder domein', 'enabled' => true, 'html' => '<p>%%DisplayName%%</p>', 'from_member_of' => ['DE-Sig', 'Weg-Groep'], 'from_addresses' => ['info@kvtgermany.de']],
+        ['name' => 'Kapot', 'enabled' => true, 'html' => '<p>{{onzin}}</p>', 'from_addresses' => ['x@kvt.nl'], 'domains' => ['kvt.nl']],
+    ],
+];
+$cands = angelia_import_candidates($snapImp, $imp);
+$byRule = array_column($cands, null, 'rule');
+$nl = $byRule['Handtekening KVT NL - Compleet'];
+check($nl['status'] === 'nieuw' && $nl['company_id'] === 'kvt', 'kandidaat: nieuw, bedrijf via SenderDomainIs');
+check($nl['html'] === '<p>{{naam}} {{functie}} {{telefoon}}</p>', 'kandidaat: marker weg, Exchange-tokens naar placeholders');
+check($nl['members'] === ['al@kvt.nl', 'jan@kvt.nl', 'piet@kvt.nl'], 'kandidaat: leden uit FromMemberOf-groep');
+check($byRule['Angelia-kvt-bestaand']['status'] === 'bestaat', 'Angelia-regel gemarkeerd als al in Angelia');
+$de = $byRule['DE zonder domein'];
+check($de['company_id'] === 'kvt-germany' && $de['shared_mailboxes'] === ['info@kvtgermany.de'], 'bedrijf via meeste adressen, From = shared mailbox');
+check($de['missing_groups'] === ['Weg-Groep'], 'ontbrekende groep gemeld');
+check($byRule['Kapot']['status'] === 'ongeldig', 'ongeldige template niet importeerbaar');
+$rep = angelia_import_apply($imp, $snapImp, array_column($cands, 'key'), 'test');
+check(count($rep['created']) === 2 && count($rep['skipped']) === 2, 'import: 2 aangemaakt, 2 overgeslagen');
+$created = angelia_group($imp, $rep['created'][0]['id']);
+check(empty($created['enabled']) && $created['imported_from'] === 'Handtekening KVT NL - Compleet', 'geimporteerde groep staat uit en onthoudt bron');
+check($created['members'] === ['jan@kvt.nl', 'piet@kvt.nl'], 'adres uit bestaande groep niet verplaatst');
+check(angelia_group($imp, 'kvt-bestaand')['members'] === ['al@kvt.nl'], 'bestaande groep onaangetast');
+$confl = array_map(static fn(array $c): string => $c['email'] . '>' . $c['group'], $rep['conflicts']);
+check($confl === ['al@kvt.nl>kvt-bestaand', 'piet@kvt.nl>' . $created['id']], 'conflicten gemeld (max. 1 groep per adres)');
+check(angelia_member_conflicts($imp) === [], 'na import geen dubbele adressen');
+$again = angelia_import_apply($imp, $snapImp, array_column(angelia_import_candidates($snapImp, $imp), 'key'), 'test');
+check($again['created'] === [], 'tweede import maakt niets dubbel');
+
 exec('rm -rf ' . escapeshellarg($tmp));
 echo $failures === 0 ? "\nAlle tests geslaagd.\n" : "\n{$failures} test(s) mislukt.\n";
 exit($failures === 0 ? 0 : 1);

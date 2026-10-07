@@ -153,6 +153,38 @@ $h = 'angelia_h';
             </tbody></table>
         <?php endif; ?>
         <?php if ($isAdmin): ?><form data-action="import"><button>Ophalen uit Exchange</button></form><?php endif; ?>
+        <?php if ($isAdmin && $snap !== null): $cands = angelia_import_candidates($snap, $store); ?>
+            <h3>Bestaande handtekeningen overnemen</h3>
+            <p class="muted">Kies welke handtekeningregels uit Exchange als Angelia-groep worden overgenomen (op basis van het overzicht van
+                <?= $h(angelia_format_datetime($snap['at'] ?? null)) ?>). Nieuwe groepen staan <strong>uit</strong>: de bestaande regels in
+                Exchange blijven werken en Angelia stuurt geen handtekening tot je de groep aanzet. Zet daarna de oude regel uit,
+                anders krijgen leden twee handtekeningen. Een adres dat al in een Angelia-groep zit wordt niet verplaatst maar gemeld.</p>
+            <?php if ($cands === []): ?>
+                <p class="muted">Geen handtekeningregels gevonden.</p>
+            <?php else: ?>
+            <form data-action="import_groups" data-confirm="Geselecteerde handtekeningen als (uitgeschakelde) Angelia-groep importeren?">
+                <table class="list"><thead><tr><th></th><th>Regel</th><th>Bedrijf</th><th>Leden</th><th>Shared mailboxes</th><th>Status</th></tr></thead><tbody>
+                <?php foreach ($cands as $c): ?>
+                    <tr>
+                        <td><input type="checkbox" name="keys[]" value="<?= $h($c['key']) ?>" <?= $c['status'] === 'nieuw' ? 'checked' : 'disabled' ?>></td>
+                        <td><?= $h($c['rule']) ?> <?= $c['enabled_in_exchange'] ? '<span class="tag on">aan</span>' : '<span class="tag off">uit</span>' ?>
+                            <?php if ($c['member_of'] !== []): ?><br><span class="muted">via <?= $h(implode(', ', $c['member_of'])) ?></span><?php endif; ?>
+                            <details><summary>HTML</summary><iframe sandbox="" style="width:100%;height:260px;border:1px solid #ccc;background:#fff" srcdoc="<?= $h($c['html']) ?>"></iframe></details></td>
+                        <td><?= $h($c['company_name'] ?? '–') ?><?= $c['domains'] !== [] ? '<br><span class="muted">' . $h(implode(', ', $c['domains'])) . '</span>' : '' ?></td>
+                        <td><?= count($c['members']) ?><?php if ($c['members'] !== []): ?><details><summary>toon</summary><?= $h(implode(', ', $c['members'])) ?></details><?php endif; ?></td>
+                        <td><?= $h(implode(', ', $c['shared_mailboxes'])) ?></td>
+                        <td><?php if ($c['status'] === 'bestaat'): ?><span class="tag">al in Angelia (<?= $h($c['existing_group']) ?>)</span>
+                            <?php elseif ($c['status'] === 'ongeldig'): ?><span class="tag off">niet te importeren</span>
+                            <?php else: ?><span class="tag on">nieuw</span><?php endif; ?>
+                            <?php foreach ($c['problems'] as $pr): ?><br><span class="muted"><?= $h($pr) ?></span><?php endforeach; ?>
+                            <?php if ($c['missing_groups'] !== []): ?><br><span class="muted">Leden niet opgehaald van: <?= $h(implode(', ', $c['missing_groups'])) ?></span><?php endif; ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody></table>
+                <button>Importeren</button>
+            </form>
+            <?php endif; ?>
+        <?php endif; ?>
     </section>
 <?php endif; ?>
 </main>

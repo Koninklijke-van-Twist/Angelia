@@ -24,6 +24,13 @@
             if (moved.length) {
                 window.alert('Verplaatst (een adres zit in hoogstens één groep): ' + moved.map(function (g) { return json.moved[g].join(', ') + ' uit ' + g; }).join('; '));
             }
+            if (json.report) {
+                const r = json.report, lines = [];
+                lines.push('Aangemaakt (uitgeschakeld): ' + (r.created.length ? r.created.map(function (c) { return c.id; }).join(', ') : 'geen'));
+                r.skipped.forEach(function (s) { lines.push('Overgeslagen: ' + s.rule + ' – ' + s.reason); });
+                r.conflicts.forEach(function (c) { lines.push('Niet toegevoegd: ' + c.email + ' (' + c.rule + ') zit al in ' + c.group); });
+                window.alert(lines.join('\n'));
+            }
             if (form.dataset.action === 'save_group' && json.id) { window.location.href = 'index.php?groep=' + encodeURIComponent(json.id); return; }
             window.location.reload();
         });
