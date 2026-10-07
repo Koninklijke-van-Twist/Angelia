@@ -24,7 +24,17 @@ function angelia_is_admin(): bool
 function angelia_csrf_token(): string
 {
     if (empty($_SESSION['angelia_csrf'])) {
-        $_SESSION['angelia_csrf'] = bin2hex(random_bytes(16));
+        // login/lib.php sluit de sessie (session_write_close); heropen kort zodat het token bewaard blijft.
+        $wasClosed = session_status() !== PHP_SESSION_ACTIVE;
+        if ($wasClosed) {
+            @session_start();
+        }
+        if (empty($_SESSION['angelia_csrf'])) {
+            $_SESSION['angelia_csrf'] = bin2hex(random_bytes(16));
+        }
+        if ($wasClosed) {
+            session_write_close();
+        }
     }
     return (string) $_SESSION['angelia_csrf'];
 }

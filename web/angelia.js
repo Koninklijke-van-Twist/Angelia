@@ -38,9 +38,13 @@
             const data = new FormData(groupForm);
             data.set('sample', document.getElementById('sample').value);
             const json = await post('preview', data);
-            if (!json.ok) { return; }
-            frame.srcdoc = '<!DOCTYPE html><html><body style="margin:12px;background:#fff">' + json.html + '</body></html>';
             const problems = document.getElementById('preview-problems');
+            if (!json.ok) {
+                problems.innerHTML = '';
+                const err = document.createElement('p'); err.className = 'notice warn'; err.textContent = 'Voorbeeld niet beschikbaar: ' + (json.error || 'onbekende fout'); problems.appendChild(err);
+                return;
+            }
+            frame.srcdoc = '<!DOCTYPE html><html><body style="margin:12px;background:#fff">' + json.html + '</body></html>';
             problems.innerHTML = '';
             (json.problems || []).forEach(function (p) {
                 const el = document.createElement('p'); el.className = 'notice warn'; el.textContent = p; problems.appendChild(el);
