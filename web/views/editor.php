@@ -50,6 +50,12 @@ $placeholders = [
                 <label>Link op de banner (optioneel)<input name="banner_link" type="url" placeholder="https://www.kvt.nl/actie" value="<?= $h($editGroup['banner_link']) ?>"<?= $ro ?>></label>
                 <label>Leden (één e-mailadres per regel)
                     <textarea name="members" rows="8"<?= $ro ?>><?= $h(implode("\n", $editGroup['members'])) ?></textarea></label>
+                <label>Shared mailboxes (statische handtekening, één per regel:<br><code>adres | naam | functie | telefoon | mobiel</code>)
+                    <textarea name="shared_mailboxes" rows="4" placeholder="ict@kvt.nl | Afdeling ICT | Serviceteam | +31 78 123 45 67"<?= $ro ?>><?= $h(implode("\n", array_map(
+                        static fn(array $m): string => rtrim(implode(' | ', [$m['email'], $m['name'], $m['title'], $m['phone'], $m['mobile']]), ' |'),
+                        $editGroup['shared_mailboxes'] ?? []))) ?></textarea></label>
+                <p class="muted">Een adres zit in hoogstens één groep. Opslaan haalt het uit andere groepen.
+                    Shared mailboxes krijgen een eigen regel met <code>From</code> (niet in de groep zetten).</p>
             </div>
             <div>
                 <label>Handtekening (HTML)

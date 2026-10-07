@@ -95,7 +95,11 @@ php web/worker.php --import    # alleen-lezen overzicht uit Exchange → web/dat
 
 Per groep: groep aanmaken als die ontbreekt → leden toevoegen/verwijderen (Angelia is de bron) → DDG's per variant → regels aanmaken/bijwerken (alleen bij verschil in HTML, groep, domein of aan/uit) → regels en DDG's van varianten die niet meer nodig zijn verwijderen. Verwijderde groepen: regels, DDG's en groep weg. Mislukt iets, dan blijft de wachtrij staan en probeert de volgende run opnieuw.
 
-Een adres in twee actieve groepen geeft een waarschuwing (twee handtekeningen).
+**Hoogstens één groep per adres.** Opslaan in de UI en `assign` halen het adres uit alle andere Angelia-groepen (ook als shared mailbox). Staat het toch dubbel (handmatig bewerkte `angelia.json`), dan waarschuwen UI en worker en synct de worker het adres alleen in de laatst gewijzigde groep. Het Exchange-overzicht (`--import`) waarschuwt als een adres in Exchange in meerdere handtekening-groepen staat.
+
+### Shared mailboxes
+
+Per groep een lijst `adres | naam | functie | telefoon | mobiel`. Elke shared mailbox krijgt een eigen regel `Angelia - <groep-id> - Shared <adres>` met **`From <adres>`** + `SenderDomainIs <domein van het adres>` en **statische** inhoud (dezelfde template, placeholders ingevuld met de waarden van de shared mailbox). Dit volgt `Set-KvtSharedMailboxSignatures.ps1`: een transportregel kan niet door Send As heen naar de gebruiker kijken, dus `%%DisplayName%%` e.d. zouden de shared mailbox zelf of leeg geven. Zet een shared mailbox dus **niet** bij de leden (Angelia weigert het).
 
 ## API
 

@@ -60,8 +60,12 @@ try {
     check($c === 403, 'assign zonder scope geweigerd');
     [$c, $b] = req('POST', 'api.php?action=assign', ['X-API-Key: onb', 'Content-Type: application/json'], '{"email":"Piet@kvt.nl","group":"kvt-monteurs"}');
     check($c === 200 && json_decode($b, true)['changed'] === ['+kvt-monteurs'], 'assign (onboarding)');
+    $body2 = http_build_query(['name' => 'Kantoor', 'company_id' => 'kvt', 'html' => '<p>{{naam}}</p>', 'text_color' => '#00529B', 'members' => '', 'enabled' => '1']);
+    req('POST', 'api.php?action=save_group', ["X-CSRF-Token: {$csrf}"], $body2, $cookie);
+    [$c, $b] = req('POST', 'api.php?action=assign', ['X-API-Key: onb', 'Content-Type: application/json'], '{"email":"piet@kvt.nl","group":"kvt-kantoor"}');
+    check($c === 200 && json_decode($b, true)['changed'] === ['-kvt-monteurs', '+kvt-kantoor'], 'assign naar andere groep haalt uit de oude (max 1 groep)');
     [$c, $b] = req('POST', 'api.php?action=unassign', ['X-API-Key: onb', 'Content-Type: application/json'], '{"email":"piet@kvt.nl"}');
-    check($c === 200 && json_decode($b, true)['changed'] === ['-kvt-monteurs'], 'unassign (offboarding)');
+    check($c === 200 && json_decode($b, true)['changed'] === ['-kvt-kantoor'], 'unassign (offboarding)');
     [$c] = req('GET', 'banner.php?g=../../etc');
     check($c === 404, 'banner.php weigert vreemde id');
 } finally {

@@ -54,8 +54,11 @@ try {
             angelia_transaction(static fn(array &$s) => angelia_delete_company($s, (string) ($_POST['id'] ?? '')));
             angelia_json(['ok' => true]);
         case 'save_group':
-            $id = angelia_transaction(static fn(array &$s) => angelia_save_group($s, $_POST, $actor));
-            angelia_json(['ok' => true, 'id' => $id]);
+            [$id, $moved] = angelia_transaction(static function (array &$s) use ($actor): array {
+                $id = angelia_save_group($s, $_POST, $actor, $moved);
+                return [$id, $moved ?? []];
+            });
+            angelia_json(['ok' => true, 'id' => $id, 'moved' => $moved]);
         case 'delete_group':
             angelia_transaction(static fn(array &$s) => angelia_delete_group($s, (string) ($_POST['id'] ?? ''), $actor));
             angelia_json(['ok' => true]);
@@ -193,19 +196,14 @@ function angelia_handle_api(string $action, string $method, array $client, strin
                 if ($target !== '' && angelia_find_index($s['groups'], $target) === null) {
                     throw new InvalidArgumentException('Groep niet gevonden.');
                 }
-                $changed = [];
-                foreach ($s['groups'] as $i => $g) {
-                    $isMember = in_array($email, $g['members'], true);
-                    if ($g['id'] === $target && !$isMember) {
-                        $s['groups'][$i]['members'] = angelia_parse_members(array_merge($g['members'], [$email]));
-                        $changed[] = '+' . $g['id'];
-                    } elseif ($g['id'] !== $target && $isMember) {
-                        $s['groups'][$i]['members'] = array_values(array_diff($g['members'], [$email]));
-                        $changed[] = '-' . $g['id'];
-                    } else {
-                        continue;
-                    }
-                    angelia_enqueue($s, 'upsert_group', $g['id'], $actor);
+                // Hoogstens één groep per adres: eerst uit alle andere groepen (ook als shared mailbox).
+                $changed = array_map(static fn(string $id): string => '-' . $id, array_keys(angelia_remove_from_other_groups($s, [$email], $target, $actor)));
+                $i = $target === '' ? null : angelia_find_index($s['groups'], $target);
+                if ($i !== null && !in_array($email, angelia_group_addresses($s['groups'][$i]), true)) {
+                    $s['groups'][$i]['members'] = angelia_parse_members(array_merge($s['groups'][$i]['members'], [$email]));
+                    $s['groups'][$i]['updated_at'] = time();
+                    angelia_enqueue($s, 'upsert_group', $target, $actor);
+                    $changed[] = '+' . $target;
                 }
                 return $changed;
             });

@@ -16,6 +16,15 @@ function angelia_build_plan(array $store): array
 {
     $groups = [];
     $problems = [];
+    // Hoogstens één groep per adres: bij een conflict wint de laatst gewijzigde groep.
+    $owner = [];
+    $byRecent = $store['groups'];
+    usort($byRecent, static fn(array $a, array $b): int => ($b['updated_at'] ?? 0) <=> ($a['updated_at'] ?? 0));
+    foreach ($byRecent as $g) {
+        foreach (angelia_group_addresses($g) as $email) {
+            $owner[$email] ??= $g['id'];
+        }
+    }
     foreach ($store['groups'] as $group) {
         $company = angelia_company($store, $group['company_id']);
         if ($company === null) {
@@ -38,12 +47,26 @@ function angelia_build_plan(array $store): array
                 'html' => $v['html'],
             ];
         }
+        foreach ($group['shared_mailboxes'] ?? [] as $mb) {
+            if ($owner[$mb['email']] !== $group['id']) {
+                continue;
+            }
+            $html = angelia_render_for_user($group, $company, angelia_banner_url($group), $mb);
+            $rules[] = [
+                'name' => angelia_rule_name($group['id'], 'Shared ' . $mb['email']),
+                'variant' => 'Shared',
+                'ddg' => null,
+                'from_address' => $mb['email'],
+                'sender_domain' => substr(strrchr($mb['email'], '@'), 1),
+                'html' => $html,
+            ];
+        }
         $groups[] = [
             'id' => $group['id'],
             'exchange_group' => $group['exchange_group'],
             'display_name' => 'Angelia - ' . $company['name'] . ' - ' . $group['name'],
             'enabled' => !empty($group['enabled']),
-            'members' => array_values($group['members']),
+            'members' => array_values(array_filter($group['members'], static fn(string $e): bool => $owner[$e] === $group['id'])),
             'rules' => $rules,
         ];
     }
@@ -54,7 +77,7 @@ function angelia_build_plan(array $store): array
         }
     }
     foreach (angelia_member_conflicts($store) as $email => $ids) {
-        $problems[] = "{$email} staat in meerdere actieve groepen (" . implode(', ', $ids) . ') en krijgt dan meerdere handtekeningen.';
+        $problems[] = "{$email} staat in meerdere groepen (" . implode(', ', $ids) . "); alleen {$owner[$email]} (laatst gewijzigd) wordt gesynchroniseerd.";
     }
     return [
         'generated_at' => time(),

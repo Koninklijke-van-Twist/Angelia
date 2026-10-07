@@ -139,6 +139,68 @@ function angelia_parse_members(string|array $input): array
 }
 
 /**
+ * Shared mailboxes van een groep, één per regel: adres | naam | functie | telefoon | mobiel
+ * (alles na het adres optioneel). Statische waarden: een transportregel kan niet door Send As heen
+ * naar de gebruiker kijken (zie Set-KvtSharedMailboxSignatures.ps1).
+ */
+function angelia_parse_shared_mailboxes(string|array $input): array
+{
+    if (is_array($input)) {
+        $lines = array_map(static fn($m): string => is_array($m)
+            ? implode('|', [$m['email'] ?? '', $m['name'] ?? '', $m['title'] ?? '', $m['phone'] ?? '', $m['mobile'] ?? ''])
+            : (string) $m, $input);
+    } else {
+        $lines = preg_split('/\R/', $input) ?: [];
+    }
+    $out = [];
+    foreach ($lines as $n => $line) {
+        if (trim($line) === '') {
+            continue;
+        }
+        $parts = array_map('trim', explode('|', $line));
+        $email = strtolower($parts[0]);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            throw new InvalidArgumentException('Shared mailbox regel ' . ($n + 1) . ': ongeldig e-mailadres.');
+        }
+        $out[$email] = ['email' => $email, 'name' => $parts[1] ?? '', 'title' => $parts[2] ?? '', 'phone' => $parts[3] ?? '', 'mobile' => $parts[4] ?? ''];
+    }
+    ksort($out);
+    return array_values($out);
+}
+
+/**
+ * Alle adressen van een groep die een handtekening krijgen (leden + shared mailboxes).
+ */
+function angelia_group_addresses(array $group): array
+{
+    return array_merge($group['members'] ?? [], array_column($group['shared_mailboxes'] ?? [], 'email'));
+}
+
+/**
+ * Eén adres zit in hoogstens één groep: haal $emails uit alle andere groepen en zet die in de wachtrij.
+ * @return array<string, string[]> groep-id => verwijderde adressen
+ */
+function angelia_remove_from_other_groups(array &$store, array $emails, string $keepGroupId, string $actor): array
+{
+    $moved = [];
+    foreach ($store['groups'] as $i => $g) {
+        if ($g['id'] === $keepGroupId) {
+            continue;
+        }
+        $hit = array_values(array_intersect(angelia_group_addresses($g), $emails));
+        if ($hit === []) {
+            continue;
+        }
+        $store['groups'][$i]['members'] = array_values(array_diff($g['members'], $emails));
+        $store['groups'][$i]['shared_mailboxes'] = array_values(array_filter($g['shared_mailboxes'] ?? [],
+            static fn(array $m): bool => !in_array($m['email'], $emails, true)));
+        $moved[$g['id']] = $hit;
+        angelia_enqueue($store, 'upsert_group', $g['id'], $actor);
+    }
+    return $moved;
+}
+
+/**
  * Valideert en bewaart een bedrijf. Geeft de id terug.
  */
 function angelia_save_company(array &$store, array $input, string $actor): string
@@ -197,7 +259,7 @@ function angelia_delete_company(array &$store, string $id): void
 /**
  * Valideert en bewaart een groep en zet een sync-taak in de wachtrij. Geeft de id terug.
  */
-function angelia_save_group(array &$store, array $input, string $actor): string
+function angelia_save_group(array &$store, array $input, string $actor, ?array &$moved = null): string
 {
     $name = trim((string) ($input['name'] ?? ''));
     $companyId = (string) ($input['company_id'] ?? '');
@@ -229,10 +291,15 @@ function angelia_save_group(array &$store, array $input, string $actor): string
         'text_color' => strtoupper($color),
         'banner_link' => $bannerLink,
         'members' => angelia_parse_members($input['members'] ?? []),
+        'shared_mailboxes' => angelia_parse_shared_mailboxes($input['shared_mailboxes'] ?? []),
         'enabled' => !empty($input['enabled']),
         'updated_at' => time(),
         'updated_by' => $actor,
     ];
+    $both = array_intersect($record['members'], array_column($record['shared_mailboxes'], 'email'));
+    if ($both !== []) {
+        throw new InvalidArgumentException('Staat zowel bij leden als bij shared mailboxes: ' . implode(', ', $both) . '.');
+    }
     if ($id === '') {
         $base = angelia_slugify($companyId . '-' . $name);
         if ($base === '') {
@@ -253,6 +320,7 @@ function angelia_save_group(array &$store, array $input, string $actor): string
         }
         $store['groups'][$i] = $record + $store['groups'][$i];
     }
+    $moved = angelia_remove_from_other_groups($store, angelia_group_addresses($record), $id, $actor);
     angelia_enqueue($store, 'upsert_group', $id, $actor);
     return $id;
 }
@@ -278,17 +346,14 @@ function angelia_enqueue(array &$store, string $type, string $groupId, string $a
 }
 
 /**
- * Leden die in meer dan één actieve groep staan (zouden twee handtekeningen krijgen).
+ * Adressen die in meer dan één groep staan (zou niet mogen; bv. na handmatig bewerken van angelia.json).
  * @return array<string, string[]> e-mail => groep-id's
  */
 function angelia_member_conflicts(array $store): array
 {
     $seen = [];
     foreach ($store['groups'] as $group) {
-        if (empty($group['enabled'])) {
-            continue;
-        }
-        foreach ($group['members'] as $email) {
+        foreach (angelia_group_addresses($group) as $email) {
             $seen[$email][] = $group['id'];
         }
     }

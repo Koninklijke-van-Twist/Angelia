@@ -20,6 +20,10 @@
             const json = await post(form.dataset.action, data);
             if (!json.ok) { window.alert(json.error || 'Opslaan mislukt.'); return; }
             if (form.dataset.redirect) { window.location.href = form.dataset.redirect; return; }
+            const moved = Object.keys(json.moved || {});
+            if (moved.length) {
+                window.alert('Verplaatst (een adres zit in hoogstens één groep): ' + moved.map(function (g) { return json.moved[g].join(', ') + ' uit ' + g; }).join('; '));
+            }
             if (form.dataset.action === 'save_group' && json.id) { window.location.href = 'index.php?groep=' + encodeURIComponent(json.id); return; }
             window.location.reload();
         });

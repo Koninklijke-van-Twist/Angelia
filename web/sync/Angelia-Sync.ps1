@@ -109,7 +109,7 @@ function Remove-ADdg([string]$Name) {
 function Get-ARules([string]$Prefix) {
     if ($Mock) { return @($S.rules.Values | Where-Object { $_.name.StartsWith($Prefix) }) }
     return @(Get-TransportRule -ResultSize Unlimited | Where-Object { $_.Name.StartsWith($Prefix) } | ForEach-Object {
-        @{ name = $_.Name; html = "$($_.ApplyHtmlDisclaimerText)"; from = "$(@($_.FromMemberOf)[0])"
+        @{ name = $_.Name; html = "$($_.ApplyHtmlDisclaimerText)"; from = "$(@($_.FromMemberOf)[0])$(@($_.From)[0])"
            domain = "$(@($_.SenderDomainIs)[0])"; enabled = ("$($_.State)" -eq 'Enabled') }
     })
 }
@@ -117,12 +117,13 @@ function Set-ARule([hashtable]$Rule, [bool]$Exists) {
     if ($Mock) { $S.rules[$Rule.name] = $Rule; return }
     $p = @{
         SenderDomainIs = $Rule.domain
-        FromMemberOf = $Rule.from
         ApplyHtmlDisclaimerLocation = 'Append'
         ApplyHtmlDisclaimerText = $Rule.html
         ApplyHtmlDisclaimerFallbackAction = 'Wrap'
         ExceptIfSubjectOrBodyContainsWords = $plan.marker_word
     }
+    # Shared mailbox: From <adres> (statische inhoud); anders FromMemberOf <groep/DDG>.
+    if ($Rule.from_address) { $p.From = $Rule.from } else { $p.FromMemberOf = $Rule.from }
     if ($Exists) { Set-TransportRule -Identity $Rule.name @p }
     else { New-TransportRule -Name $Rule.name @p -Enabled $Rule.enabled | Out-Null }
     if ($Exists) {
@@ -186,7 +187,8 @@ foreach ($g in $plan.groups) {
                 }
                 $from = $rule.ddg.name
             }
-            $desired = @{ name = $rule.name; html = $rule.html; from = $from; domain = $rule.sender_domain; enabled = [bool]$g.enabled }
+            if ($rule.from_address) { $from = $rule.from_address }
+            $desired = @{ name = $rule.name; html = $rule.html; from = $from; from_address = [bool]$rule.from_address; domain = $rule.sender_domain; enabled = [bool]$g.enabled }
             $cur = $existingRules[$rule.name]
             if (-not $cur) {
                 Invoke-Change 'regel_aanmaken' $rule.name $rule.sender_domain { Set-ARule $desired $false }

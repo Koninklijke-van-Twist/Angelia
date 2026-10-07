@@ -76,9 +76,30 @@ check(array_keys($simple) === ['Standaard'] && $simple['Standaard']['filter'] ==
 $plan = angelia_build_plan($store);
 check($plan['groups'][0]['rules'][0]['name'] === 'Angelia - kvt-kantoor - Compleet', 'regelnaam');
 check($plan['groups'][0]['rules'][0]['sender_domain'] === 'kvt.nl', 'SenderDomainIs = bedrijfsdomein');
-angelia_save_group($store, ['name' => 'Dubbel', 'company_id' => 'kvt', 'html' => '<p>{{naam}}</p>', 'members' => 'a@kvt.nl', 'enabled' => '1'], 'test');
-check(count(angelia_member_conflicts($store)) === 1, 'lid in twee actieve groepen gedetecteerd');
-check(count(angelia_build_plan($store)['problems']) === 1, 'conflict staat in plan-problemen');
+// --- hoogstens één groep per adres
+angelia_save_group($store, ['name' => 'Dubbel', 'company_id' => 'kvt', 'html' => '<p>{{naam}}</p>', 'members' => 'a@kvt.nl', 'enabled' => '1',
+    'shared_mailboxes' => "ICT@kvt.nl | Afdeling ICT | Serviceteam | +31 78 000 00 00"], 'test', $moved);
+check($moved === ['kvt-kantoor' => ['a@kvt.nl']], 'opslaan verplaatst lid uit andere groep');
+check(angelia_group($store, 'kvt-kantoor')['members'] === ['b@kvt.nl'], 'lid weg uit oude groep');
+check(angelia_member_conflicts($store) === [], 'geen dubbele lidmaatschappen na opslaan');
+$manual = $store;
+$manual['groups'][0]['members'][] = 'a@kvt.nl';
+$manual['groups'][0]['updated_at'] = 1;
+check(count(angelia_member_conflicts($manual)) === 1, 'handmatig dubbel lid gedetecteerd');
+$mp = angelia_build_plan($manual);
+check(count($mp['problems']) === 1 && $mp['groups'][0]['members'] === ['b@kvt.nl'], 'plan synct dubbel lid alleen in laatst gewijzigde groep');
+try {
+    angelia_save_group($store, ['name' => 'Fout', 'company_id' => 'kvt', 'html' => '<p>x</p>', 'members' => 'z@kvt.nl', 'shared_mailboxes' => 'z@kvt.nl'], 'test');
+    check(false, 'adres als lid én shared mailbox geweigerd');
+} catch (InvalidArgumentException) {
+    check(true, 'adres als lid én shared mailbox geweigerd');
+}
+// --- shared mailbox
+$dub = angelia_group($store, 'kvt-dubbel');
+check($dub['shared_mailboxes'][0]['email'] === 'ict@kvt.nl', 'shared mailbox opgeslagen');
+$shared = array_values(array_filter(angelia_build_plan($store)['groups'][1]['rules'], static fn($r) => isset($r['from_address'])));
+check(count($shared) === 1 && $shared[0]['from_address'] === 'ict@kvt.nl' && str_contains($shared[0]['html'], 'Afdeling ICT')
+    && !str_contains($shared[0]['html'], '%%'), 'shared mailbox: eigen regel met From en statische inhoud');
 
 // --- worker in mock-modus (echt Angelia-Sync.ps1)
 $pwsh = getenv('ANGELIA_PWSH') ?: 'pwsh';
@@ -96,7 +117,7 @@ if ($code !== 0) {
     check($dry['errors'] === [], 'dry-run zonder fouten');
     check(!is_file($tmp . '/mock_exchange.json'), 'dry-run schrijft niets');
     $counts = array_count_values(array_column($dry['actions'], 'action'));
-    check(($counts['groep_aanmaken'] ?? 0) === 2 && ($counts['regel_aanmaken'] ?? 0) === 5 && ($counts['ddg_aanmaken'] ?? 0) === 4, 'dry-run: 2 groepen, 4 DDG, 5 regels');
+    check(($counts['groep_aanmaken'] ?? 0) === 2 && ($counts['regel_aanmaken'] ?? 0) === 6 && ($counts['ddg_aanmaken'] ?? 0) === 4, 'dry-run: 2 groepen, 4 DDG, 6 regels (incl. shared mailbox)');
 
     $run = angelia_run_sync(false, true);
     check($run['errors'] === [] && count($run['actions']) === count($dry['actions']), 'sync voert dezelfde acties uit');
@@ -111,7 +132,7 @@ if ($code !== 0) {
     });
     $diff = array_column(angelia_run_sync(false, true)['actions'], 'action');
     sort($diff);
-    check($diff === ['ddg_verwijderen', 'ddg_verwijderen', 'ddg_verwijderen', 'ddg_verwijderen', 'lid_toevoegen', 'lid_verwijderen',
+    check($diff === ['ddg_verwijderen', 'ddg_verwijderen', 'ddg_verwijderen', 'ddg_verwijderen', 'lid_toevoegen',
         'regel_aanmaken', 'regel_verwijderen', 'regel_verwijderen', 'regel_verwijderen', 'regel_verwijderen'], 'wijziging: alleen verschillen');
 
     angelia_transaction(static fn(array &$s) => angelia_delete_group($s, 'kvt-dubbel', 'test'));
@@ -121,7 +142,7 @@ if ($code !== 0) {
     check(!isset($state['groups']['Angelia-kvt-dubbel']) && isset($state['groups']['Angelia-kvt-kantoor']), 'mock-state klopt');
     check(angelia_run_sync(false, true)['actions'] === [], 'na verwijderen weer idempotent');
     $snap = angelia_import_snapshot(true);
-    check($snap['mode'] === 'mock' && count($snap['groups']) === 1 && count($snap['rules']) === 1, 'import-overzicht (mock)');
+        check($snap['mode'] === 'mock' && count($snap['groups']) === 1 && count($snap['rules']) === 1, 'import-overzicht (mock)');
 }
 
 exec('rm -rf ' . escapeshellarg($tmp));

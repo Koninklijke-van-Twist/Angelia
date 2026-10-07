@@ -11,7 +11,7 @@ $editGroup = $editId !== '' ? angelia_group($store, $editId) : null;
 if ($isNew) {
     $editGroup = [
         'id' => '', 'name' => '', 'company_id' => (string) ($_GET['bedrijf'] ?? ($store['companies'][0]['id'] ?? '')),
-        'html' => angelia_default_template(), 'text_color' => '#00529B', 'banner_link' => '', 'members' => [],
+        'html' => angelia_default_template(), 'text_color' => '#00529B', 'banner_link' => '', 'members' => [], 'shared_mailboxes' => [],
         'enabled' => false, 'banner_file' => null, 'exchange_group' => '',
     ];
 }
@@ -125,6 +125,16 @@ $h = 'angelia_h';
             <p class="muted">Nog niet opgehaald.</p>
         <?php else: ?>
             <p class="muted">Opgehaald <?= $h(angelia_format_datetime($snap['at'] ?? null)) ?> (<?= $h($snap['mode'] ?? '') ?>).</p>
+            <?php
+            $snapSeen = [];
+            foreach ($snap['groups'] as $sg) {
+                foreach ((array) $sg['members'] as $em) {
+                    $snapSeen[$em][] = $sg['name'];
+                }
+            }
+            foreach (array_filter($snapSeen, static fn(array $n): bool => count($n) > 1) as $em => $names): ?>
+                <p class="notice warn">In Exchange staat <?= $h($em) ?> in meerdere handtekening-groepen: <?= $h(implode(', ', $names)) ?>.</p>
+            <?php endforeach; ?>
             <h3>Groepen</h3>
             <table class="list"><thead><tr><th>Groep</th><th>Leden</th></tr></thead><tbody>
             <?php foreach ($snap['groups'] as $sg): ?>
