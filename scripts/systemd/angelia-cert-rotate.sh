@@ -127,6 +127,7 @@ chmod 600 "$NEW_PFX"
 log "Exchange-login testen met het nieuwe certificaat (max. 10 pogingen, de key heeft even tijd nodig)."
 ok=0
 for attempt in $(seq 1 10); do
+    # shellcheck disable=SC2016 # PowerShell-variabelen, bewust niet door bash uitgebreid
     if ANGELIA_PFX="$NEW_PFX" "$PWSH" -NoLogo -NoProfile -NonInteractive -Command '
         $ErrorActionPreference = "Stop"
         Import-Module ExchangeOnlineManagement

@@ -67,6 +67,16 @@ Eén bestand per groep met een vaste naam (`<groep-id>.png|jpg|gif`):
 
 De URL in de regel verandert niet bij een nieuwe upload, dus de regel hoeft niet aangepast te worden. Gevolg: ook **al verzonden** mails tonen de nieuwe banner zodra de ontvanger ze opnieuw opent (en het plaatje niet uit cache of via een proxy komt; Gmail en Outlook-proxy's cachen soms langer). Geen cache-busting via `?v=`, omdat dat juist de vaste URL zou breken; wie dat wel wil, uploadt een ander bestandstype of maakt een nieuwe groep.
 
+## Serverinrichting
+
+Eén commando op de server (vanuit een checkout van deze repo):
+
+```sh
+sudo bash scripts/setup-server.sh
+```
+
+Dit installeert jq als dat nodig is, vraagt webroot, tenant-, client- en object-ID, de organisatie en het certificaatwachtwoord (twee keer, wordt nooit getoond), maakt het certificaat (`data/certs/angelia-exo.pfx`, www-data, 600) en de `.cer` voor Entra (`/etc/angelia/angelia-exo.cer`), schrijft `/etc/angelia/cert-rotate.env`, installeert en activeert de rotatie-timer, controleert `proc_open` en toont het `$exchange`-blok voor `auth.php` (of voegt het toe). Opnieuw draaien is veilig: een bestaand certificaat of een bestaande config wordt alleen na bevestiging vervangen.
+
 ## Rechten en eenmalige inrichting (Tim)
 
 1. **App-registratie** in Entra, bv. *Angelia Exchange Sync*, single tenant, geen redirect URI.
@@ -97,7 +107,7 @@ Faalt een stap, dan blijft het oude certificaat in gebruik, wordt een al toegevo
 
 Angelia waarschuwt in de UI en in de JSON van `hourly.php` (`certificate_warning`) als het certificaat binnen 30 dagen verloopt of niet te lezen is.
 
-Installatie (Tim, op de server; niets hiervan is al gedaan):
+Installatie: `sudo bash scripts/setup-server.sh` doet dit. Handmatig kan ook:
 
 ```sh
 sudo apt install jq openssl
@@ -159,5 +169,6 @@ Niet in git. Kopieer `web/auth_TEMPLATE.php` naar `web/auth.php`. Iedereen in `$
 ```sh
 php tests/angelia_test.php       # logica + worker in mock-modus (echte Angelia-Sync.ps1, pwsh nodig; anders overgeslagen)
 bash tests/cert_rotate_test.sh   # certificaatrotatie tegen nep-Graph
+bash tests/setup_server_test.sh  # setup-server.sh in een tijdelijke map (zonder root/systemctl)
 php tests/api_access_test.php    # start php -S op een tijdelijke kopie van web/: UI, CSRF, API-sleutels, scopes
 ```

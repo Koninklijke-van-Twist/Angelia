@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016,SC2034 # check() krijgt bewust niet-uitgebreide expressies voor eval
 # Test van scripts/systemd/angelia-cert-rotate.sh tegen een nep-Graph (php -S) en een nep-pwsh.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,11 +40,11 @@ check '[ "$(sha)" = "$before" ]' 'mislukte login: oude .pfx ongewijzigd'
 check '[ "$(jq ".keys|length" "$T/state.json")" = 1 ] && [ "$(jq -r ".keys[0].keyId" "$T/state.json")" = oud ]' 'mislukte login: nieuwe key teruggedraaid'
 
 # 2. geslaagde rotatie
-ANGELIA_CERT_CONFIG="$T/env" ANGELIA_RETRY_SLEEP=0 bash "$ROOT/scripts/systemd/angelia-cert-rotate.sh" 2>"$T/log2"; r=$?
+if ANGELIA_CERT_CONFIG="$T/env" ANGELIA_RETRY_SLEEP=0 bash "$ROOT/scripts/systemd/angelia-cert-rotate.sh" 2>"$T/log2"; then r=0; else r=$?; fi
 check '[ $r -eq 0 ]' 'rotatie geslaagd'
 check '[ "$(sha)" != "$before" ]' '.pfx vervangen'
 check '[ "$(stat -c %a "$T/cert.pfx")" = 600 ]' '.pfx chmod 600'
 check '[ "$(jq ".keys|length" "$T/state.json")" = 1 ] && [ "$(jq -r ".keys[0].keyId" "$T/state.json")" != oud ]' 'alleen nieuwe key over (oude verwijderd)'
 check 'openssl pkcs12 -in "$T/cert.pfx" -passin pass:geheim -nokeys 2>/dev/null | openssl x509 -noout -checkend $((700*86400)) >/dev/null' 'nieuw certificaat ~2 jaar geldig'
 check '[ ! -e "$T/cert.pfx.prev" ]' 'geen .prev achtergebleven'
-[ $fails -eq 0 ] && echo "Alle tests geslaagd." || { echo "$fails test(s) mislukt."; cat "$T/log1" "$T/log2"; exit 1; }
+if [ "$fails" -eq 0 ]; then echo "Alle tests geslaagd."; else echo "$fails test(s) mislukt."; cat "$T/log1" "$T/log2"; exit 1; fi
