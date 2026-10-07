@@ -77,6 +77,16 @@ sudo bash scripts/setup-server.sh
 
 Dit installeert jq als dat nodig is, vraagt webroot, tenant-, client- en object-ID, de organisatie en het certificaatwachtwoord (twee keer, wordt nooit getoond), maakt het certificaat (`data/certs/angelia-exo.pfx`, www-data, 600) en de `.cer` voor Entra (`/etc/angelia/angelia-exo.cer`), schrijft `/etc/angelia/cert-rotate.env`, installeert en activeert de rotatie-timer, controleert `proc_open` en toont het `$exchange`-blok voor `auth.php` (of voegt het toe). Opnieuw draaien is veilig: een bestaand certificaat of een bestaande config wordt alleen na bevestiging vervangen.
 
+`auth.php` wordt alleen via `scripts/auth-php-update.php` aangemaakt of aangevuld. Een nieuw bestand komt van `auth_TEMPLATE.php`. Het bestand begint altijd met `<?php` en een afsluitende `?>` wordt eerst verwijderd, anders toont de webserver alles daarna als tekst. Vooraf komt er een backup (`auth.php.bak-…`, 600) en achteraf draait `php -l`; bij een fout blijft het origineel staan. Zet nooit een `?>` aan het eind van `auth.php`.
+
+Wachtwoord van het certificaat wijzigen (zelfde certificaat, geen wijziging in Entra nodig; werkt `.pfx`, `/etc/angelia/cert-rotate.env` en `auth.php` bij):
+
+```sh
+sudo bash scripts/setup-server.sh --rotate-password
+```
+
+Zijn naast het wachtwoord ook de `.pfx` of de sleutel uitgelekt, gebruik dan geen `--rotate-password` maar maak een nieuw certificaat: draai `setup-server.sh` opnieuw, kies *vervangen*, upload de nieuwe `.cer` en verwijder het oude certificaat in Entra.
+
 ## Rechten en eenmalige inrichting (Tim)
 
 1. **App-registratie** in Entra, bv. *Angelia Exchange Sync*, single tenant, geen redirect URI.

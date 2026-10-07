@@ -40,4 +40,30 @@ grep -q "\*\*\*\*\*\*\*\*" "$T/out2" && ok "blok getoond met gemaskeerd wachtwoo
 
 # run 3: wachtwoorden verschillen → fout
 if printf '%s\n' "$T/web" "$G" "$G" "$G" "" "n" "a" "b" | bash "$ROOT/scripts/setup-server.sh" > "$T/out3" 2>&1; then bad "ongelijke wachtwoorden geweigerd"; else ok "ongelijke wachtwoorden geweigerd"; fi
+
+# run 4: --rotate-password (zelfde certificaat, nieuw wachtwoord in .pfx, env en auth.php)
+export PW2='Nieuw$ww 2!'
+printf '%s\n' "$PW2" "$PW2" | bash "$ROOT/scripts/setup-server.sh" --rotate-password > "$T/out4" 2>&1 || { cat "$T/out4"; bad "rotate-password geslaagd"; }
+openssl pkcs12 -in "$T/web/data/certs/angelia-exo.pfx" -passin env:PW2 -noout 2>/dev/null && ok "rotate: .pfx met nieuw wachtwoord" || bad "rotate: .pfx"
+# shellcheck disable=SC1091
+( source "$T/etc/cert-rotate.env"; [ "$PFX_PASSWORD" = "$PW2" ] ) && ok "rotate: env bijgewerkt" || bad "rotate: env"
+php -r "require '$T/web/auth.php'; exit(\$exchange['certificate_password'] === getenv('PW2') ? 0 : 1);" && ok "rotate: auth.php bijgewerkt" || bad "rotate: auth.php"
+grep -qF "$PW2" "$T/out4" && bad "rotate: wachtwoord niet in uitvoer" || ok "rotate: wachtwoord niet in uitvoer"
+
+# auth.php-randgevallen via het hulpscript
+H="$ROOT/scripts/auth-php-update.php"
+printf '$allowedUsers = [\x27a@kvt.nl\x27];\n' > "$T/a1.php"
+ANGELIA_APP_ID=x ANGELIA_ORG=y PFX_PASSWORD=p php "$H" "$T/a1.php" "" add >/dev/null && head -1 "$T/a1.php" | grep -qx '<?php' && php -l "$T/a1.php" >/dev/null && ok "auth.php zonder openingstag gerepareerd" || bad "zonder openingstag"
+printf '<?php\n$allowedUsers = [];\n?>\n' > "$T/a2.php"
+ANGELIA_APP_ID=x ANGELIA_ORG=y PFX_PASSWORD=p php "$H" "$T/a2.php" "" add >/dev/null && ! grep -q '?>' "$T/a2.php" && php -r "require '$T/a2.php'; exit(\$exchange['app_id'] === 'x' ? 0 : 1);" && ok "afsluitende tag verwijderd vóór toevoegen" || bad "afsluitende tag"
+out="$(cd "$T" && php "$T/a2.php")"; [ -z "$out" ] && ok "auth.php geeft geen uitvoer (niets lekt naar de browser)" || bad "auth.php geeft uitvoer"
+rm -f "$T/a3.php"
+ANGELIA_APP_ID=x ANGELIA_ORG=y PFX_PASSWORD=p php "$H" "$T/a3.php" "$ROOT/web/auth_TEMPLATE.php" add >/dev/null && php -r "require '$T/a3.php'; exit(\$exchange['certificate_password'] === 'p' && isset(\$allowedUsers) ? 0 : 1);" && [ "$(grep -c '^\$exchange' "$T/a3.php")" = 1 ] && ok "nieuw vanaf template, één \$exchange-blok" || bad "vanaf template"
+printf '<?php\n$x = ;\n' > "$T/a4.php"; cp "$T/a4.php" "$T/a4.orig"
+if ANGELIA_APP_ID=x ANGELIA_ORG=y PFX_PASSWORD=p php "$H" "$T/a4.php" "" add >/dev/null 2>&1; then bad "ongeldige php geweigerd"; else cmp -s "$T/a4.php" "$T/a4.orig" && ok "ongeldige php: origineel ongewijzigd" || bad "origineel gewijzigd"; fi
+printf '<?php\n$oud = [\x27certificate_password\x27 => \x27x\x27];\n$exchange = [\n    \x27certificate_password\x27 => \x27oud\x27,\n];\n' > "$T/a5.php"
+PFX_PASSWORD=nieuw php "$H" "$T/a5.php" "" password >/dev/null && php -r "require '$T/a5.php'; exit(\$exchange['certificate_password'] === 'nieuw' && \$oud['certificate_password'] === 'x' ? 0 : 1);" && ok "password: alleen binnen \$exchange vervangen" || bad "password-scope"
+bak="$(find "$T" -maxdepth 1 -name 'a5.php.bak-*' | head -1)"; [ "$(stat -c %a "$bak")" = 600 ] && ok "backup 600" || bad "backup-rechten"
+f="$ROOT/web/auth_TEMPLATE.php"; head -1 "$f" | grep -qx '<?php' && ! grep -q '?>' "$f" && ok "auth_TEMPLATE.php: openingstag, geen afsluitende tag" || bad "auth_TEMPLATE.php"
+
 if [ "$fails" -eq 0 ]; then echo "Alle tests geslaagd."; else echo "$fails test(s) mislukt."; exit 1; fi
