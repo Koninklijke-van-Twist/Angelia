@@ -1,0 +1,5 @@
+web/auth.php
+web/data/
+!web/data/.htaccess
+/data/
+.phpunit*
