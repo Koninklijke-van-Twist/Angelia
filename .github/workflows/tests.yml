@@ -1,0 +1,22 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+      - name: Lint
+        run: for f in $(git ls-files 'web/*.php' 'tests/*.php'); do php -l "$f" || exit 1; done
+      - name: Tests (pwsh staat op de runner)
+        run: |
+          php tests/angelia_test.php
+          php tests/api_access_test.php
