@@ -136,6 +136,8 @@ php web/worker.php --import    # alleen-lezen overzicht uit Exchange → web/dat
 
 Per groep: groep aanmaken als die ontbreekt → leden toevoegen/verwijderen (Angelia is de bron) → DDG's per variant → regels aanmaken/bijwerken (alleen bij verschil in HTML, groep, domein of aan/uit) → regels en DDG's van varianten die niet meer nodig zijn verwijderen. Verwijderde groepen: regels, DDG's en groep weg. Mislukt iets, dan blijft de wachtrij staan en probeert de volgende run opnieuw.
 
+**Bestaande handtekeningen overnemen.** Na *Ophalen uit Exchange* toont de pagina alle transportregels met `ApplyHtmlDisclaimerText` (HTML, leden van de `FromMemberOf`-groepen – ook dynamische groepen –, `From`-adressen als shared mailbox, bedrijf via `SenderDomainIs` of het meest voorkomende domein). Vink aan en klik *Importeren*: Angelia maakt per regel een **uitgeschakelde** groep (Exchange-tokens `%%DisplayName%%` e.d. worden placeholders, de marker valt weg). Regels die al door Angelia beheerd worden of al geïmporteerd zijn worden overgeslagen; adressen die al in een Angelia-groep zitten worden niet verplaatst maar gemeld. De oude regels blijven ongewijzigd: zet ze zelf uit wanneer je de Angelia-groep aanzet. Let op: de sync maakt voor een uitgeschakelde groep wel al de `Angelia-<id>`-groep en een uitgeschakelde regel aan.
+
 **Hoogstens één groep per adres.** Opslaan in de UI en `assign` halen het adres uit alle andere Angelia-groepen (ook als shared mailbox). Staat het toch dubbel (handmatig bewerkte `angelia.json`), dan waarschuwen UI en worker en synct de worker het adres alleen in de laatst gewijzigde groep. Het Exchange-overzicht (`--import`) waarschuwt als een adres in Exchange in meerdere handtekening-groepen staat.
 
 ### Shared mailboxes

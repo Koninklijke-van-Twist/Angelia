@@ -12,7 +12,8 @@
  *   POST ?action=unassign  {"email": "…"}                      (scope 'assign') – uit alle groepen (offboarding)
  *
  * Met Entra-sessie (UI, beheerders, CSRF): save_company, delete_company, save_group, delete_group,
- * upload_banner, preview, dry_run, import (alleen-lezen overzicht uit Exchange).
+ * upload_banner, preview, dry_run, import (alleen-lezen overzicht uit Exchange),
+ * import_groups (keys[] uit het overzicht → uitgeschakelde Angelia-groepen; verandert niets in Exchange-regels).
  */
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/lib/bootstrap.php';
@@ -108,6 +109,17 @@ try {
         case 'import':
             $snap = angelia_import_snapshot();
             angelia_json(['ok' => true, 'groups' => count($snap['groups']), 'rules' => count($snap['rules'])]);
+        case 'import_groups':
+            $snap = angelia_load_snapshot();
+            if ($snap === null) {
+                throw new InvalidArgumentException('Haal eerst het overzicht op uit Exchange.');
+            }
+            $keys = array_values(array_map('strval', (array) ($_POST['keys'] ?? [])));
+            if ($keys === []) {
+                throw new InvalidArgumentException('Kies minstens één handtekening om te importeren.');
+            }
+            $report = angelia_transaction(static fn(array &$s) => angelia_import_apply($s, $snap, $keys, $actor));
+            angelia_json(['ok' => true, 'report' => $report]);
         case 'dry_run':
             $result = angelia_run_sync(true);
             angelia_json(['ok' => true, 'result' => $result, 'at_text' => angelia_format_datetime($result['at'])]);
