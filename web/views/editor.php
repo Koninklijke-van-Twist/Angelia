@@ -5,6 +5,8 @@ if (!isset($editGroup, $store)) {
     exit;
 }
 $ro = $isAdmin ? '' : ' disabled';
+// Tekstvelden readonly i.p.v. disabled, zodat de preview ook voor alleen-lezen gebruikers de inhoud meestuurt.
+$roText = $isAdmin ? '' : ' readonly';
 $placeholders = [
     '{{naam}}' => 'Weergavenaam (%%DisplayName%%)',
     '{{functie}}' => 'Functie (%%Title%%)',
@@ -29,6 +31,11 @@ $placeholders = [
     <?php endif; ?>
     <form id="group-form" data-action="save_group" class="editor">
         <input type="hidden" name="id" value="<?= $h($editGroup['id']) ?>">
+        <?php if (!$isAdmin): ?>
+            <input type="hidden" name="company_id" value="<?= $h($editGroup['company_id']) ?>">
+            <input type="hidden" name="text_color" value="<?= $h($editGroup['text_color']) ?>">
+            <input type="hidden" name="banner_link" value="<?= $h($editGroup['banner_link']) ?>">
+        <?php endif; ?>
         <div class="cols">
             <div>
                 <label>Naam<input name="name" value="<?= $h($editGroup['name']) ?>" required<?= $ro ?>></label>
@@ -46,7 +53,7 @@ $placeholders = [
             </div>
             <div>
                 <label>Handtekening (HTML)
-                    <textarea name="html" id="html" rows="22" spellcheck="false"<?= $ro ?>><?= $h($editGroup['html']) ?></textarea></label>
+                    <textarea name="html" id="html" rows="22" spellcheck="false"<?= $roText ?>><?= $h($editGroup['html']) ?></textarea></label>
                 <details class="placeholders"><summary>Placeholders</summary>
                     <ul><?php foreach ($placeholders as $code => $label): ?>
                         <li><button type="button" class="insert" data-insert="<?= $h($code) ?>"<?= $ro ?>><?= $h($code) ?></button> <?= $h($label) ?></li>

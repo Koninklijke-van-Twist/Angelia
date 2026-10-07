@@ -73,9 +73,16 @@ function angelia_transaction(callable $mutator): mixed
     try {
         $data = angelia_load();
         $result = $mutator($data);
+        $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $tmp = angelia_store_path() . '.tmp';
-        file_put_contents($tmp, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        rename($tmp, angelia_store_path());
+        if (file_put_contents($tmp, $json, LOCK_EX) !== strlen($json)) {
+            @unlink($tmp);
+            throw new RuntimeException('Kan angelia.json niet schrijven.');
+        }
+        if (!rename($tmp, angelia_store_path())) {
+            @unlink($tmp);
+            throw new RuntimeException('Kan angelia.json niet vervangen.');
+        }
         return $result;
     } finally {
         flock($lock, LOCK_UN);

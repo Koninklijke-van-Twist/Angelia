@@ -6,17 +6,28 @@ on:
     branches-ignore:
       - master
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
+      - name: Controleer pwsh
+        run: |
+          command -v pwsh || { echo "pwsh ontbreekt op de runner"; exit 1; }
+          pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
       - name: Lint
         run: for f in $(git ls-files 'web/*.php' 'tests/*.php'); do php -l "$f" || exit 1; done
-      - name: Tests (pwsh staat op de runner)
+      - name: Tests
+        env:
+          ANGELIA_REQUIRE_PWSH: '1'
         run: |
           php tests/angelia_test.php
           php tests/api_access_test.php

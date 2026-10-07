@@ -37,10 +37,11 @@ function angelia_run_sync(bool $dryRun, bool $forceMock = false): array
         $result['errors'] = array_merge($result['errors'], (array) ($json['errors'] ?? []));
     }
 
-    angelia_transaction(static function (array &$data) use ($result, $startedAt): void {
+    $loadedJobs = array_map('serialize', $store['queue']);
+    angelia_transaction(static function (array &$data) use ($result, $loadedJobs): void {
         if (!$result['dry_run'] && $result['errors'] === []) {
-            // Alleen taken die vóór de start in de wachtrij stonden zijn verwerkt.
-            $data['queue'] = array_values(array_filter($data['queue'], static fn(array $job): bool => $job['queued_at'] > $startedAt));
+            // Alleen de taken die in het geladen plan zaten zijn verwerkt; nieuwere blijven staan.
+            $data['queue'] = array_values(array_filter($data['queue'], static fn(array $job): bool => !in_array(serialize($job), $loadedJobs, true)));
         }
         if ($result['dry_run']) {
             $data['last_dry_run'] = $result;

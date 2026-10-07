@@ -42,7 +42,9 @@ jobs:
           set cmd:fail-exit true
           set net:max-retries 1
           set net:timeout 20
-          set ftp:ssl-allow false
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set ssl:verify-certificate true
           set ftp:passive-mode yes
 
           cd "$FTP_REMOTE_DIR"
@@ -51,6 +53,7 @@ jobs:
             --exclude-glob .htaccess \
             --exclude-glob cache/** \
             --exclude-glob data/** \
+            --exclude-glob *.json \
             --exclude-glob auth.php \
             ./web .
 

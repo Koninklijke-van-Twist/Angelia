@@ -21,30 +21,30 @@ function Invoke-AngeliaApi {
 
 function Get-AngeliaGroups {
     <# Groepen, optioneel alleen voor één e-maildomein (bv. kvt.nl). #>
-    param([string]$Domain)
-    $groups = (Invoke-AngeliaApi -Action groups).groups
+    param([string]$Domain, [string]$ApiKey = $env:ANGELIA_API_KEY)
+    $groups = (Invoke-AngeliaApi -Action groups -ApiKey $ApiKey).groups
     if ($Domain) { $groups = $groups | Where-Object { $_.domain -eq $Domain } }
     @($groups)
 }
 
 function Set-AngeliaMember {
     <# Zet een gebruiker in precies één handtekening-groep (haalt hem uit andere Angelia-groepen). #>
-    param([Parameter(Mandatory)][string]$Email, [Parameter(Mandatory)][string]$Group)
-    Invoke-AngeliaApi -Action assign -Method POST -Body @{ email = $Email; group = $Group }
+    param([Parameter(Mandatory)][string]$Email, [Parameter(Mandatory)][string]$Group, [string]$ApiKey = $env:ANGELIA_API_KEY)
+    Invoke-AngeliaApi -ApiKey $ApiKey -Action assign -Method POST -Body @{ email = $Email; group = $Group }
 }
 
 function Remove-AngeliaMember {
     <# Haalt een gebruiker uit alle handtekening-groepen (offboarding). #>
-    param([Parameter(Mandatory)][string]$Email)
-    Invoke-AngeliaApi -Action unassign -Method POST -Body @{ email = $Email }
+    param([Parameter(Mandatory)][string]$Email, [string]$ApiKey = $env:ANGELIA_API_KEY)
+    Invoke-AngeliaApi -ApiKey $ApiKey -Action unassign -Method POST -Body @{ email = $Email }
 }
 
 function Get-AngeliaSignature {
     <# HTML-handtekening voor één gebruiker (bv. als client-side terugval of ter controle). #>
-    param([Parameter(Mandatory)][string]$Email, [string]$Group, [string]$Name, [string]$Title, [string]$Phone, [string]$Mobile)
+    param([Parameter(Mandatory)][string]$Email, [string]$Group, [string]$Name, [string]$Title, [string]$Phone, [string]$Mobile, [string]$ApiKey = $env:ANGELIA_API_KEY)
     $q = @{ email = $Email; name = $Name; title = $Title; phone = $Phone; mobile = $Mobile }
     if ($Group) { $q.group = $Group }
-    Invoke-AngeliaApi -Action signature -Query $q
+    Invoke-AngeliaApi -ApiKey $ApiKey -Action signature -Query $q
 }
 
 Export-ModuleMember -Function Get-AngeliaGroups, Set-AngeliaMember, Remove-AngeliaMember, Get-AngeliaSignature

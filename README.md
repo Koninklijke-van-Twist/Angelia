@@ -77,7 +77,7 @@ De URL in de regel verandert niet bij een nieuwe upload, dus de regel hoeft niet
 6. **Server** (Ubuntu 25.04): PowerShell 7 + `Install-Module ExchangeOnlineManagement -Scope AllUsers` (versie 3.x). PHP moet `proc_open` mogen gebruiken.
 7. **Blob** (optioneel): container `angelia` met publieke leestoegang op blob-niveau in `sakvthandtekeningen`, SAS met alleen *create/write* op die container, met een verloopdatum.
 8. **auth.php**: `web/auth_TEMPLATE.php` → `web/auth.php`, vul `$allowedUsers`, `$admins`, `$apiKeys`, `$exchange` en eventueel de blob-gegevens in.
-9. **Cron** (voorstel, niet ingericht): `*/5 * * * * php /…/angelia/worker.php >> /…/angelia/data/worker.log 2>&1`. Het draait alleen als er iets in de wachtrij staat; `--force` 's nachts herstelt handmatige wijzigingen in Exchange (drift).
+9. **Cron** (voorstel, niet ingericht): `*/5 * * * * php /…/angelia/web/worker.php >> /…/angelia/web/data/worker.log 2>&1` (paden: de page root `web/` op de server). Het draait alleen als er iets in de wachtrij staat; `--force` 's nachts herstelt handmatige wijzigingen in Exchange (drift).
 
 Eerste keer: `php web/worker.php --import` (overzicht) en `php web/worker.php --dry-run`, en pas daarna zonder `--dry-run`.
 

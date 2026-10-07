@@ -85,7 +85,11 @@ $pwsh = getenv('ANGELIA_PWSH') ?: 'pwsh';
 $GLOBALS['pwshPath'] = $pwsh;
 exec(escapeshellarg($pwsh) . ' -NoProfile -Command "exit 0" 2>/dev/null', $o, $code);
 if ($code !== 0) {
-    echo "skip worker-tests (pwsh niet gevonden)\n";
+    if (getenv('ANGELIA_REQUIRE_PWSH') === '1') {
+        check(false, 'pwsh beschikbaar (ANGELIA_REQUIRE_PWSH=1)');
+    } else {
+        echo "skip worker-tests (pwsh niet gevonden)\n";
+    }
 } else {
     angelia_transaction(static function (array &$s) use ($store): void { $s = $store; });
     $dry = angelia_run_sync(true, true);

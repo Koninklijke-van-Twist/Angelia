@@ -135,6 +135,17 @@ function Remove-ARule([string]$Name) {
     Remove-TransportRule -Identity $Name -Confirm:$false
 }
 
+# Exchange normaliseert RecipientFilter (extra haakjes, SystemMailbox-uitsluitingen) en geeft FromMemberOf
+# soms als naam of DN terug. Vergelijk daarom genormaliseerd, anders zou live elke run alles bijwerken.
+function Test-FilterMatch([string]$Current, [string]$Wanted) {
+    $norm = { param($f) ($f -replace '[\s()]', '').ToLowerInvariant() }
+    return (& $norm $Current).Contains((& $norm $Wanted))
+}
+function Test-MemberOfMatch([string]$Current, [string]$Wanted) {
+    if (-not $Current) { return $false }
+    return $Current -ieq $Wanted -or $Current -ilike "CN=$Wanted,*" -or $Current -ilike "*/$Wanted" -or $Current -ilike "*\$Wanted"
+}
+
 function Invoke-Change([string]$Action, [string]$Target, [string]$Detail, [scriptblock]$Do) {
     Add-Action $Action $Target $Detail
     if ($DryRun) { return }
@@ -169,7 +180,7 @@ foreach ($g in $plan.groups) {
             if ($rule.ddg) {
                 $filter = "(RecipientType -eq 'UserMailbox') -and (MemberOfGroup -eq '$($current.dn)') -and $($rule.ddg.filter)"
                 $d = Get-ADdg $rule.ddg.name
-                if (-not $d -or $d.filter -ne $filter) {
+                if (-not $d -or -not (Test-FilterMatch $d.filter $filter)) {
                     $exists = [bool]$d
                     Invoke-Change ($(if ($exists) { 'ddg_bijwerken' } else { 'ddg_aanmaken' })) $rule.ddg.name '' { Set-ADdg $rule.ddg.name $filter $exists }
                 }
@@ -179,7 +190,7 @@ foreach ($g in $plan.groups) {
             $cur = $existingRules[$rule.name]
             if (-not $cur) {
                 Invoke-Change 'regel_aanmaken' $rule.name $rule.sender_domain { Set-ARule $desired $false }
-            } elseif ($cur.html -ne $desired.html -or $cur.from -ne $desired.from -or $cur.domain -ne $desired.domain -or [bool]$cur.enabled -ne $desired.enabled) {
+            } elseif ($cur.html -ne $desired.html -or -not (Test-MemberOfMatch $cur.from $desired.from) -or $cur.domain -ne $desired.domain -or [bool]$cur.enabled -ne $desired.enabled) {
                 Invoke-Change 'regel_bijwerken' $rule.name $(if ($desired.enabled) { 'aan' } else { 'uit' }) { Set-ARule $desired $true }
             }
         }
