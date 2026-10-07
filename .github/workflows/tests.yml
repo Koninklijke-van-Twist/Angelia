@@ -24,7 +24,7 @@ jobs:
           command -v pwsh || { echo "pwsh ontbreekt op de runner"; exit 1; }
           pwsh -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
       - name: Lint
-        run: for f in $(git ls-files 'web/*.php' 'tests/*.php'); do php -l "$f" || exit 1; done
+        run: for f in $(git ls-files 'web/*.php' 'tests/*.php' 'scripts/*.php'); do php -l "$f" || exit 1; done
       - name: Tests
         env:
           ANGELIA_REQUIRE_PWSH: '1'

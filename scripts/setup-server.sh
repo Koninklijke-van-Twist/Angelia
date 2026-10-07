@@ -37,9 +37,89 @@ confirm() { # confirm <vraag> → 0 bij ja (standaard nee)
     [[ "$answer" =~ ^[jJyY]$ ]]
 }
 
+PFX_PASSWORD=""
+read_password() {
+    local p1 p2
+    read -r -s -p "Wachtwoord voor het certificaat: " p1 || true; echo
+    read -r -s -p "Herhaal het wachtwoord: " p2 || true; echo
+    [[ -n "$p1" ]] || fail "Leeg wachtwoord is niet toegestaan."
+    [[ "$p1" == "$p2" ]] || fail "De wachtwoorden zijn niet gelijk."
+    PFX_PASSWORD="$p1"
+    export PFX_PASSWORD
+}
+
+write_env_file() { # write_env_file <pad>: atomair, 600, met de huidige variabelen
+    local tmp_env
+    tmp_env="$(mktemp "$(dirname "$1")/.cert-rotate.env.XXXXXX")"
+    {
+        printf 'TENANT_ID=%q\n' "$TENANT_ID"
+        printf 'CLIENT_ID=%q\n' "$CLIENT_ID"
+        printf 'APP_OBJECT_ID=%q\n' "$APP_OBJECT_ID"
+        printf 'EXO_ORGANIZATION=%q\n' "$EXO_ORGANIZATION"
+        printf 'PFX_PATH=%q\n' "$PFX_PATH"
+        printf 'PFX_PASSWORD=%q\n' "$PFX_PASSWORD"
+        printf 'PFX_OWNER=%q\n' "$OWNER"
+    } > "$tmp_env"
+    chmod 600 "$tmp_env"
+    [[ "${ANGELIA_SETUP_SKIP_ROOTCHECK:-}" == 1 ]] || chown root:root "$tmp_env"
+    mv -f "$tmp_env" "$1"
+}
+env_has_password() { # env_has_password <pad>: staat het huidige wachtwoord erin?
+    local want="$PFX_PASSWORD"
+    # shellcheck disable=SC1090
+    (source "$1"; [[ "$PFX_PASSWORD" == "$want" ]])
+}
+
+# --rotate-password: nieuw wachtwoord op dezelfde sleutel/hetzelfde certificaat (geen Entra-wijziging),
+# bijwerken in .pfx, cert-rotate.env en auth.php. Bij een fout gaat alles terug.
+rotate_password() {
+    local env_file="$ETC_DIR/cert-rotate.env" rc
+    [[ -f "$env_file" ]] || fail "$env_file ontbreekt; draai eerst de normale inrichting."
+    # shellcheck disable=SC1090
+    source "$env_file"
+    : "${PFX_PATH:?}" "${PFX_PASSWORD:?}" "${CLIENT_ID:?}" "${EXO_ORGANIZATION:?}" "${TENANT_ID:?}" "${APP_OBJECT_ID:?}"
+    OWNER="${PFX_OWNER:-$OWNER}"
+    local old_pw="$PFX_PASSWORD"
+    WEBROOT="$(dirname "$(dirname "$(dirname "$PFX_PATH")")")"
+    AUTH="$WEBROOT/auth.php"
+    say "=== Angelia: certificaatwachtwoord wijzigen ==="
+    read_password
+    [[ "$PFX_PASSWORD" != "$old_pw" ]] || fail "Het nieuwe wachtwoord is gelijk aan het oude."
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    umask 077
+    OLD_PW="$old_pw" openssl pkcs12 -in "$PFX_PATH" -passin env:OLD_PW -nodes -out "$work/all.pem" 2>/dev/null ||
+        fail "Huidige .pfx kan niet geopend worden met het wachtwoord uit $env_file."
+    openssl pkcs12 -export -in "$work/all.pem" -passout env:PFX_PASSWORD -out "$work/new.pfx" || fail ".pfx maken mislukt"
+    cp -p "$PFX_PATH" "$work/old.pfx"
+    cp -p "$env_file" "$work/old.env"
+    install -m 600 -o "$OWNER" "$work/new.pfx" "$PFX_PATH.new"
+    mv -f "$PFX_PATH.new" "$PFX_PATH"
+    write_env_file "$env_file"
+    rc=0
+    if [[ -f "$AUTH" ]]; then
+        ANGELIA_APP_ID="$CLIENT_ID" ANGELIA_ORG="$EXO_ORGANIZATION" php "$REPO/scripts/auth-php-update.php" "$AUTH" "" password || rc=$?
+    else
+        warn "$AUTH bestaat niet; zet het nieuwe wachtwoord daar zelf in."
+    fi
+    if [[ $rc -ne 0 ]] || ! env_has_password "$env_file" || ! openssl pkcs12 -in "$PFX_PATH" -passin env:PFX_PASSWORD -noout 2>/dev/null; then
+        cp -p "$work/old.pfx" "$PFX_PATH"
+        cp -p "$work/old.env" "$env_file"
+        fail "Wachtwoord wijzigen mislukt; .pfx en $env_file zijn teruggezet (auth.php is niet gewijzigd)."
+    fi
+    say "Wachtwoord gewijzigd in $PFX_PATH, $env_file${AUTH:+ en $AUTH}."
+}
+
 if [[ "${ANGELIA_SETUP_SKIP_ROOTCHECK:-}" != 1 && $EUID -ne 0 ]]; then
     fail "Start met sudo: sudo bash scripts/setup-server.sh"
 fi
+
+MODE="${1:-}"
+if [[ "$MODE" == "--rotate-password" ]]; then
+    rotate_password
+    exit 0
+fi
+[[ -z "$MODE" ]] || fail "Onbekende optie $MODE (gebruik: zonder optie, of --rotate-password)."
 
 say "=== Angelia serverinrichting ==="
 
@@ -79,16 +159,6 @@ if [[ -f "$PFX_PATH" ]]; then
     fi
 fi
 
-PFX_PASSWORD=""
-read_password() {
-    local p1 p2
-    read -r -s -p "Wachtwoord voor het certificaat: " p1 || true; echo
-    read -r -s -p "Herhaal het wachtwoord: " p2 || true; echo
-    [[ -n "$p1" ]] || fail "Leeg wachtwoord is niet toegestaan."
-    [[ "$p1" == "$p2" ]] || fail "De wachtwoorden zijn niet gelijk."
-    PFX_PASSWORD="$p1"
-    export PFX_PASSWORD
-}
 if [[ $make_cert -eq 1 ]]; then
     read_password
 else
@@ -103,6 +173,11 @@ install -d -m 700 "$ETC_DIR"
 install -d -m 750 "$WEBROOT/data"
 install -d -m 700 "$CERT_DIR"
 chown "$OWNER" "$WEBROOT/data" "$CERT_DIR"
+# data/ mag nooit via de webserver bereikbaar zijn (ook vóór de eerste PHP-run).
+for d in "$WEBROOT/data" "$CERT_DIR"; do
+    [[ -f "$d/.htaccess" ]] || printf 'Require all denied\n' > "$d/.htaccess"
+    chmod 644 "$d/.htaccess"
+done
 
 if [[ $make_cert -eq 1 ]]; then
     work="$(mktemp -d)"
@@ -133,19 +208,8 @@ if [[ -f "$ENV_FILE" ]] && ! confirm "$ENV_FILE bestaat al. Overschrijven?"; the
     write_env=0
 fi
 if [[ $write_env -eq 1 ]]; then
-    tmp_env="$(mktemp "$ETC_DIR/.cert-rotate.env.XXXXXX")"
-    {
-        printf 'TENANT_ID=%q\n' "$TENANT_ID"
-        printf 'CLIENT_ID=%q\n' "$CLIENT_ID"
-        printf 'APP_OBJECT_ID=%q\n' "$APP_OBJECT_ID"
-        printf 'EXO_ORGANIZATION=%q\n' "$ORGANIZATION"
-        printf 'PFX_PATH=%q\n' "$PFX_PATH"
-        printf 'PFX_PASSWORD=%q\n' "$PFX_PASSWORD"
-        printf 'PFX_OWNER=%q\n' "$OWNER"
-    } > "$tmp_env"
-    chmod 600 "$tmp_env"
-    [[ "${ANGELIA_SETUP_SKIP_ROOTCHECK:-}" == 1 ]] || chown root:root "$tmp_env"
-    mv -f "$tmp_env" "$ENV_FILE"
+    EXO_ORGANIZATION="$ORGANIZATION"
+    write_env_file "$ENV_FILE"
     say "Rotatie-config geschreven: $ENV_FILE (600)."
 fi
 
@@ -173,7 +237,7 @@ for ini in $PHPINI_GLOB; do
 done
 [[ $found_ini -eq 1 ]] || warn "Geen php.ini van apache2/fpm gevonden; controleer proc_open zelf."
 
-# 7. auth.php
+# 7. auth.php (via auth-php-update.php: altijd <?php bovenaan, geen afsluitende tag, php -l, backup)
 exchange_block() { # exchange_block <wachtwoord-tekst>
     cat <<PHP
 
@@ -187,13 +251,30 @@ exchange_block() { # exchange_block <wachtwoord-tekst>
 PHP
 }
 AUTH="$WEBROOT/auth.php"
-if [[ -f "$AUTH" ]] && grep -Eq "^[[:space:]]*\\\$exchange[[:space:]]*=" "$AUTH"; then
-    say "auth.php heeft al een \$exchange-blok; niet aangepast. Controleer het zelf:"
+TEMPLATE="$WEBROOT/auth_TEMPLATE.php"
+[[ -f "$TEMPLATE" ]] || TEMPLATE="$REPO/web/auth_TEMPLATE.php"
+command -v php >/dev/null 2>&1 || fail "php-cli ontbreekt (nodig om auth.php veilig te bewerken)."
+update_auth() { # update_auth <add|password>
+    ANGELIA_APP_ID="$CLIENT_ID" ANGELIA_ORG="$ORGANIZATION" php "$REPO/scripts/auth-php-update.php" "$AUTH" "$TEMPLATE" "$1"
+}
+if [[ ! -f "$AUTH" ]]; then
+    if confirm "$AUTH bestaat nog niet. Aanmaken vanaf auth_TEMPLATE.php, met het \$exchange-blok?"; then
+        update_auth add || fail "auth.php aanmaken mislukt."
+        chown "root:$OWNER" "$AUTH" 2>/dev/null || true
+        chmod 640 "$AUTH"
+        say "Aangemaakt: $AUTH. Vul daarin nog \$allowedUsers, \$admins en \$apiKeys in."
+    else
+        say "Maak $AUTH later aan vanaf auth_TEMPLATE.php en voeg dit toe (vul het wachtwoord zelf in):"
+        exchange_block "'********' /* vul zelf in */"
+    fi
+elif grep -Eq "^[[:space:]]*\\\$exchange[[:space:]]*=" "$AUTH"; then
+    say "auth.php heeft al een \$exchange-blok; inhoud niet aangepast."
+    rc=0; update_auth add || rc=$?
+    [[ $rc -eq 0 ]] && say "auth.php gerepareerd (openingstag/afsluitende tag)."
+    [[ $rc -eq 0 || $rc -eq 3 ]] || fail "auth.php controleren mislukt."
     exchange_block "'********' /* vul zelf in */"
-elif [[ -f "$AUTH" ]] && confirm "\$exchange-blok toevoegen aan $AUTH (met het wachtwoord)?"; then
-    pw_php="$(php -r 'echo var_export(getenv("PFX_PASSWORD"), true);' 2>/dev/null || true)"
-    [[ -n "$pw_php" ]] || fail "php-cli ontbreekt; voeg het blok zelf toe."
-    exchange_block "$pw_php" >> "$AUTH"
+elif confirm "\$exchange-blok toevoegen aan $AUTH (met het wachtwoord)?"; then
+    update_auth add || fail "auth.php aanvullen mislukt; er is niets gewijzigd."
     say "Toegevoegd aan $AUTH."
 else
     say "Zet dit in $AUTH (vul het wachtwoord zelf in):"
