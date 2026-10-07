@@ -61,6 +61,9 @@ rm -f "$T/a3.php"
 ANGELIA_APP_ID=x ANGELIA_ORG=y PFX_PASSWORD=p php "$H" "$T/a3.php" "$ROOT/web/auth_TEMPLATE.php" add >/dev/null && php -r "require '$T/a3.php'; exit(\$exchange['certificate_password'] === 'p' && isset(\$allowedUsers) ? 0 : 1);" && [ "$(grep -c '^\$exchange' "$T/a3.php")" = 1 ] && ok "nieuw vanaf template, één \$exchange-blok" || bad "vanaf template"
 printf '<?php\n$x = ;\n' > "$T/a4.php"; cp "$T/a4.php" "$T/a4.orig"
 if ANGELIA_APP_ID=x ANGELIA_ORG=y PFX_PASSWORD=p php "$H" "$T/a4.php" "" add >/dev/null 2>&1; then bad "ongeldige php geweigerd"; else cmp -s "$T/a4.php" "$T/a4.orig" && ok "ongeldige php: origineel ongewijzigd" || bad "origineel gewijzigd"; fi
+printf '<?php\n$oud = [\x27certificate_password\x27 => \x27x\x27];\n$exchange = [\n    \x27certificate_password\x27 => \x27oud\x27,\n];\n' > "$T/a5.php"
+PFX_PASSWORD=nieuw php "$H" "$T/a5.php" "" password >/dev/null && php -r "require '$T/a5.php'; exit(\$exchange['certificate_password'] === 'nieuw' && \$oud['certificate_password'] === 'x' ? 0 : 1);" && ok "password: alleen binnen \$exchange vervangen" || bad "password-scope"
+bak="$(find "$T" -maxdepth 1 -name 'a5.php.bak-*' | head -1)"; [ "$(stat -c %a "$bak")" = 600 ] && ok "backup 600" || bad "backup-rechten"
 f="$ROOT/web/auth_TEMPLATE.php"; head -1 "$f" | grep -qx '<?php' && ! grep -q '?>' "$f" && ok "auth_TEMPLATE.php: openingstag, geen afsluitende tag" || bad "auth_TEMPLATE.php"
 
 if [ "$fails" -eq 0 ]; then echo "Alle tests geslaagd."; else echo "$fails test(s) mislukt."; exit 1; fi

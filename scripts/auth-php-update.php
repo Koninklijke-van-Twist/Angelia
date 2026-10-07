@@ -15,6 +15,8 @@
  */
 
 [$self, $path, $template, $mode] = $argv + [null, '', '', 'add'];
+// Backup en tijdelijk bestand bevatten het wachtwoord: direct 600 aanmaken.
+umask(0077);
 $password = (string) getenv('PFX_PASSWORD');
 if ($password === '') {
     fwrite(STDERR, "PFX_PASSWORD ontbreekt.\n");
@@ -49,9 +51,12 @@ if ($mode === 'password') {
         fwrite(STDERR, "Geen \$exchange-blok in auth.php.\n");
         exit(1);
     }
+    // Alleen binnen het $exchange-blok vervangen, niet een eerdere 'certificate_password' elders.
     $count = 0;
-    $source = (string) preg_replace_callback("/('certificate_password'\s*=>\s*)(?:'(?:[^'\\\\]|\\\\.)*'|\"(?:[^\"\\\\]|\\\\.)*\")/",
-        static fn(array $m): string => $m[1] . $pw, $source, 1, $count);
+    $passwordPattern = "/('certificate_password'\s*=>\s*)(?:'(?:[^'\\\\]|\\\\.)*'|\"(?:[^\"\\\\]|\\\\.)*\")/";
+    $source = (string) preg_replace_callback('/^\s*\$exchange\s*=\s*\[.*?^\s*\];/ms', static function (array $block) use ($pw, $passwordPattern, &$count): string {
+        return (string) preg_replace_callback($passwordPattern, static fn(array $m): string => $m[1] . $pw, $block[0], 1, $count);
+    }, $source, 1);
     if ($count !== 1) {
         fwrite(STDERR, "'certificate_password' niet gevonden in het \$exchange-blok.\n");
         exit(1);

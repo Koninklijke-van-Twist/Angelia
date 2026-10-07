@@ -93,9 +93,16 @@ rotate_password() {
     openssl pkcs12 -export -in "$work/all.pem" -passout env:PFX_PASSWORD -out "$work/new.pfx" || fail ".pfx maken mislukt"
     cp -p "$PFX_PATH" "$work/old.pfx"
     cp -p "$env_file" "$work/old.env"
+    [[ ! -f "$AUTH" ]] || cp -p "$AUTH" "$work/old.auth"
+    rollback() { # alles terugzetten (pfx, env, auth.php) en stoppen
+        cp -p "$work/old.pfx" "$PFX_PATH" || warn "Herstel van $PFX_PATH mislukt."
+        cp -p "$work/old.env" "$env_file" || warn "Herstel van $env_file mislukt."
+        if [[ -f "$work/old.auth" ]]; then cp -p "$work/old.auth" "$AUTH" || warn "Herstel van $AUTH mislukt."; fi
+        fail "Wachtwoord wijzigen mislukt; .pfx, $env_file en auth.php zijn teruggezet."
+    }
     install -m 600 -o "$OWNER" "$work/new.pfx" "$PFX_PATH.new"
-    mv -f "$PFX_PATH.new" "$PFX_PATH"
-    write_env_file "$env_file"
+    mv -f "$PFX_PATH.new" "$PFX_PATH" || rollback
+    ( write_env_file "$env_file" ) || rollback
     rc=0
     if [[ -f "$AUTH" ]]; then
         ANGELIA_APP_ID="$CLIENT_ID" ANGELIA_ORG="$EXO_ORGANIZATION" php "$REPO/scripts/auth-php-update.php" "$AUTH" "" password || rc=$?
@@ -103,9 +110,7 @@ rotate_password() {
         warn "$AUTH bestaat niet; zet het nieuwe wachtwoord daar zelf in."
     fi
     if [[ $rc -ne 0 ]] || ! env_has_password "$env_file" || ! openssl pkcs12 -in "$PFX_PATH" -passin env:PFX_PASSWORD -noout 2>/dev/null; then
-        cp -p "$work/old.pfx" "$PFX_PATH"
-        cp -p "$work/old.env" "$env_file"
-        fail "Wachtwoord wijzigen mislukt; .pfx en $env_file zijn teruggezet (auth.php is niet gewijzigd)."
+        rollback
     fi
     say "Wachtwoord gewijzigd in $PFX_PATH, $env_file${AUTH:+ en $AUTH}."
 }
