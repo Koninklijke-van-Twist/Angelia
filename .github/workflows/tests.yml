@@ -31,3 +31,4 @@ jobs:
         run: |
           php tests/angelia_test.php
           php tests/api_access_test.php
+          bash tests/cert_rotate_test.sh

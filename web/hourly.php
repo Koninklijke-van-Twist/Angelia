@@ -13,15 +13,16 @@ require_once __DIR__ . '/lib/bootstrap.php';
 set_time_limit(900);
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
+$certWarning = angelia_certificate_warning();
 $store = angelia_load();
 if (!angelia_is_dirty($store)) {
-    angelia_json(['ok' => true, 'skipped' => true, 'reason' => 'Geen wijzigingen sinds de laatste sync.']);
+    angelia_json(['ok' => true, 'skipped' => true, 'reason' => 'Geen wijzigingen sinds de laatste sync.', 'certificate_warning' => $certWarning]);
 }
 
 try {
     $result = angelia_run_sync(false);
 } catch (AngeliaSyncBusy $e) {
-    angelia_json(['ok' => true, 'skipped' => true, 'reason' => $e->getMessage()]);
+    angelia_json(['ok' => true, 'skipped' => true, 'reason' => $e->getMessage(), 'certificate_warning' => $certWarning]);
 } catch (Throwable $e) {
     angelia_json(['ok' => false, 'error' => $e->getMessage()], 500);
 }
@@ -34,4 +35,5 @@ angelia_json([
     'actions' => count($result['actions']),
     'errors' => $result['errors'],
     'problems' => $result['problems'],
+    'certificate_warning' => $certWarning,
 ], $result['errors'] === [] ? 200 : 500);

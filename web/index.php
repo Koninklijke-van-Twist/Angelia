@@ -38,6 +38,9 @@ $h = 'angelia_h';
 <?php if (!angelia_exchange_configured()): ?>
     <p class="notice">Exchange is nog niet gekoppeld (geen app-registratie in auth.php). Synchronisatie draait in <strong>mock-modus</strong>: er verandert niets in Exchange.</p>
 <?php endif; ?>
+<?php if (($certWarning = angelia_certificate_warning()) !== null): ?>
+    <p class="notice warn"><?= $h($certWarning) ?></p>
+<?php endif; ?>
 <?php foreach ($conflicts as $email => $ids): ?>
     <p class="notice warn"><?= $h($email) ?> staat in meerdere actieve groepen (<?= $h(implode(', ', $ids)) ?>) en krijgt dan meerdere handtekeningen.</p>
 <?php endforeach; ?>

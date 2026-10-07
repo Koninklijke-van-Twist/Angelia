@@ -83,6 +83,35 @@ Eerste keer: `php web/worker.php --import` (overzicht) en `php web/worker.php --
 
 Zolang `$exchange` leeg is draait alles in **mock-modus** (`web/data/mock_exchange.json` speelt dan Exchange).
 
+## Certificaatrotatie (jaarlijks)
+
+`scripts/systemd/` bevat `angelia-cert-rotate.sh` + `.service` + `.timer` (`OnCalendar=yearly`, `Persistent=true`). De stappen:
+
+1. Nieuw self-signed RSA-2048-certificaat maken, 2 jaar geldig.
+2. Toevoegen aan de app-registratie met Graph `POST /applications/{object-id}/addKey`, met een proof-JWT die met het **huidige** certificaat ondertekend is. Het Graph-token komt ook van het huidige certificaat. Er zijn geen extra Graph-rechten nodig.
+3. Exchange-login testen met het nieuwe certificaat (`Connect-ExchangeOnline`, 10 pogingen met 60 s ertussen, omdat een nieuwe key even tijd nodig heeft).
+4. De `.pfx` in `web/data/certs/` atomair vervangen (eigenaar `www-data`, chmod 600, wachtwoord blijft gelijk).
+5. Pas daarna `removeKey` voor de oude key.
+
+Faalt een stap, dan blijft het oude certificaat in gebruik, wordt een al toegevoegde nieuwe key weer verwijderd en stopt het script met een fout. Is het huidige certificaat al verlopen, dan kan rotatie via een proof niet meer; dan moet het handmatig in Entra.
+
+Angelia waarschuwt in de UI en in de JSON van `hourly.php` (`certificate_warning`) als het certificaat binnen 30 dagen verloopt of niet te lezen is.
+
+Installatie (Tim, op de server; niets hiervan is al gedaan):
+
+```sh
+sudo apt install jq openssl
+sudo install -m 750 scripts/systemd/angelia-cert-rotate.sh /usr/local/sbin/
+sudo install -m 644 scripts/systemd/angelia-cert-rotate.{service,timer} /etc/systemd/system/
+sudo install -d -m 700 /etc/angelia
+sudoedit /etc/angelia/cert-rotate.env    # TENANT_ID, CLIENT_ID, APP_OBJECT_ID, EXO_ORGANIZATION, PFX_PATH, PFX_PASSWORD (chmod 600, root)
+sudo systemctl daemon-reload
+sudo systemctl enable --now angelia-cert-rotate.timer
+sudo systemctl start angelia-cert-rotate.service && journalctl -u angelia-cert-rotate -n 50   # eenmalig testen
+```
+
+`PFX_PASSWORD` moet gelijk zijn aan `certificate_password` in `web/auth.php`. Test lokaal: `bash tests/cert_rotate_test.sh` (draait tegen een nep-Graph en een nep-pwsh).
+
 ## Worker (handmatig)
 
 `hourly.php` doet de automatische sync. `worker.php` is voor handmatig gebruik op de server:
@@ -129,5 +158,6 @@ Niet in git. Kopieer `web/auth_TEMPLATE.php` naar `web/auth.php`. Iedereen in `$
 
 ```sh
 php tests/angelia_test.php       # logica + worker in mock-modus (echte Angelia-Sync.ps1, pwsh nodig; anders overgeslagen)
+bash tests/cert_rotate_test.sh   # certificaatrotatie tegen nep-Graph
 php tests/api_access_test.php    # start php -S op een tijdelijke kopie van web/: UI, CSRF, API-sleutels, scopes
 ```

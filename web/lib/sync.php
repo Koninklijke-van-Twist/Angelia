@@ -98,3 +98,26 @@ function angelia_exchange_configured(): bool
     return is_array($cfg) && ($cfg['app_id'] ?? '') !== '' && ($cfg['organization'] ?? '') !== ''
         && (($cfg['certificate_thumbprint'] ?? '') !== '' || ($cfg['certificate_path'] ?? '') !== '');
 }
+
+/**
+ * Waarschuwing als het Exchange-certificaat binnen $days dagen verloopt (of onleesbaar is). null = in orde of niet geconfigureerd.
+ */
+function angelia_certificate_warning(int $days = 30): ?string
+{
+    $cfg = angelia_config('exchange', []);
+    $path = is_array($cfg) ? (string) ($cfg['certificate_path'] ?? '') : '';
+    if ($path === '') {
+        return null;
+    }
+    $certs = [];
+    if (!is_file($path) || !openssl_pkcs12_read((string) file_get_contents($path), $certs, (string) ($cfg['certificate_password'] ?? ''))) {
+        return 'Het Exchange-certificaat kan niet gelezen worden (' . basename($path) . ').';
+    }
+    $info = openssl_x509_parse($certs['cert']);
+    $validTo = (int) ($info['validTo_time_t'] ?? 0);
+    if ($validTo - time() > $days * 86400) {
+        return null;
+    }
+    return ($validTo < time() ? 'Het Exchange-certificaat is verlopen op ' : 'Het Exchange-certificaat verloopt op ')
+        . angelia_format_datetime($validTo) . '. Controleer de jaarlijkse rotatie (angelia-cert-rotate.timer).';
+}

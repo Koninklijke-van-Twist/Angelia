@@ -1,0 +1,10 @@
+[Unit]
+Description=Angelia: jaarlijkse rotatie van het Exchange-app-certificaat
+
+[Timer]
+OnCalendar=yearly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

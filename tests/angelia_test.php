@@ -101,6 +101,18 @@ $shared = array_values(array_filter(angelia_build_plan($store)['groups'][1]['rul
 check(count($shared) === 1 && $shared[0]['from_address'] === 'ict@kvt.nl' && str_contains($shared[0]['html'], 'Afdeling ICT')
     && !str_contains($shared[0]['html'], '%%'), 'shared mailbox: eigen regel met From en statische inhoud');
 
+// --- certificaatwaarschuwing
+check(angelia_certificate_warning() === null, 'geen certificaat geconfigureerd: geen waarschuwing');
+$key = openssl_pkey_new(['private_key_bits' => 2048]);
+$crt = openssl_csr_sign(openssl_csr_new(['commonName' => 'test'], $key), null, $key, 10);
+openssl_pkcs12_export_to_file($crt, angelia_data_dir() . '/c.pfx', $key, 'pw');
+$GLOBALS['exchange'] = ['certificate_path' => angelia_data_dir() . '/c.pfx', 'certificate_password' => 'pw'];
+check(str_contains((string) angelia_certificate_warning(), 'verloopt op'), 'certificaat < 30 dagen: waarschuwing');
+check(angelia_certificate_warning(5) === null, 'certificaat > drempel: geen waarschuwing');
+$GLOBALS['exchange'] = ['certificate_path' => angelia_data_dir() . '/c.pfx', 'certificate_password' => 'fout'];
+check(str_contains((string) angelia_certificate_warning(), 'niet gelezen'), 'onleesbaar certificaat: waarschuwing');
+unset($GLOBALS['exchange']);
+
 // --- worker in mock-modus (echt Angelia-Sync.ps1)
 $pwsh = getenv('ANGELIA_PWSH') ?: 'pwsh';
 $GLOBALS['pwshPath'] = $pwsh;
