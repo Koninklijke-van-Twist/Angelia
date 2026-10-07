@@ -115,7 +115,7 @@ $h = 'angelia_h';
             <button id="dry-run">Proefrun (dry-run): wat zou er veranderen?</button>
             <div id="dry-run-result"></div>
         <?php endif; ?>
-        <p class="muted">De echte sync draait via <code>php worker.php</code> (cron, zie README).</p>
+        <p class="muted">De echte sync draait elk uur via <code>hourly.php</code>, alleen als er iets gewijzigd is.</p>
     </section>
 
     <?php $snap = angelia_load_snapshot(); ?>

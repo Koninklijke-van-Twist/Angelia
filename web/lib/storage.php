@@ -40,6 +40,8 @@ function angelia_default_store(): array
         'groups' => [],
         'queue' => [],
         'last_sync' => null,
+        'version' => 0,          // +1 bij elke wijziging die naar Exchange moet (dirty-stempel)
+        'synced_version' => 0,   // versie van de laatste geslaagde (niet-dry-run) sync
     ];
 }
 
@@ -342,7 +344,17 @@ function angelia_delete_group(array &$store, string $id, string $actor): void
 function angelia_enqueue(array &$store, string $type, string $groupId, string $actor, array $extra = []): void
 {
     $store['queue'] = array_values(array_filter($store['queue'], static fn(array $job): bool => $job['group_id'] !== $groupId));
+    $store['version'] = (int) ($store['version'] ?? 0) + 1;
+    $store['changed_at'] = time();
     $store['queue'][] = ['type' => $type, 'group_id' => $groupId, 'queued_at' => time(), 'queued_by' => $actor] + $extra;
+}
+
+/**
+ * Is er iets gewijzigd sinds de laatste geslaagde sync?
+ */
+function angelia_is_dirty(array $store): bool
+{
+    return (int) ($store['version'] ?? 0) !== (int) ($store['synced_version'] ?? 0) || $store['queue'] !== [];
 }
 
 /**

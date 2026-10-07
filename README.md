@@ -14,8 +14,8 @@ Beheer van de e-mailhandtekeningen van KVT, KVT Germany en HVT op sleutels.kvt.n
 ## Architectuur
 
 ```
- UI (index.php) ──► web/data/angelia.json ──► wachtrij
-                                                 │  php worker.php (cron, voorstel)
+ UI (index.php) ──► web/data/angelia.json ──► wachtrij + versie
+                                                 │  hourly.php (run-pages.sh, alleen bij wijzigingen)
                                                  ▼
                          plan.json (gewenste toestand) ──► pwsh sync/Angelia-Sync.ps1
                                                               │ app-only certificaat
@@ -62,8 +62,8 @@ De transportregel past bij hoe KVT het nu al doet en is centraal te beheren. De 
 
 Eén bestand per groep met een vaste naam (`<groep-id>.png|jpg|gif`):
 
-- **Azure Blob** (aanbevolen, zelfde opslagaccount als nu: `sakvthandtekeningen`): `$blobContainerUrl` + `$blobSasToken` in `auth.php`. URL `…/angelia/<groep-id>.png`, `Cache-Control: public, max-age=300`.
-- Anders lokaal in `web/data/banners/`, publiek via `banner.php?g=<groep-id>` (geen login, 5 minuten cache).
+- **Standaard (voor de start): zonder blob.** Banners staan in `web/data/banners/` en zijn publiek via `banner.php?g=<groep-id>` (geen login, 5 minuten cache).
+- **Azure Blob** (optioneel, zelfde opslagaccount als nu: `sakvthandtekeningen`): `$blobContainerUrl` + `$blobSasToken` in `auth.php`. URL `…/angelia/<groep-id>.png`, `Cache-Control: public, max-age=300`.
 
 De URL in de regel verandert niet bij een nieuwe upload, dus de regel hoeft niet aangepast te worden. Gevolg: ook **al verzonden** mails tonen de nieuwe banner zodra de ontvanger ze opnieuw opent (en het plaatje niet uit cache of via een proxy komt; Gmail en Outlook-proxy's cachen soms langer). Geen cache-busting via `?v=`, omdat dat juist de vaste URL zou breken; wie dat wel wil, uploadt een ander bestandstype of maakt een nieuwe groep.
 
@@ -75,19 +75,21 @@ De URL in de regel verandert niet bij een nieuwe upload, dus de regel hoeft niet
 4. **Certificaat**: self-signed (bv. 2 jaar), publieke `.cer` uploaden bij de app-registratie, `.pfx` met wachtwoord op de server in `web/data/certs/` (niet in git, niet via FTP, `.htaccess` deny). Op Linux werkt alleen `certificate_path`; `certificate_thumbprint` is voor de Windows-certificaatstore.
 5. **Graph**: niet nodig voor v1. Het lidmaatschap van mail-enabled security groups is in Graph alleen-lezen, daarom gaat dat via Exchange (`Add-/Remove-DistributionGroupMember`). Een latere koppeling (gebruikers zoeken, attributen tonen) heeft `User.Read.All` nodig.
 6. **Server** (Ubuntu 25.04): PowerShell 7 + `Install-Module ExchangeOnlineManagement -Scope AllUsers` (versie 3.x). PHP moet `proc_open` mogen gebruiken.
-7. **Blob** (optioneel): container `angelia` met publieke leestoegang op blob-niveau in `sakvthandtekeningen`, SAS met alleen *create/write* op die container, met een verloopdatum.
+7. **Blob** (optioneel; zonder blob gaat alles via `banner.php`): container `angelia` met publieke leestoegang op blob-niveau in `sakvthandtekeningen`, SAS met alleen *create/write* op die container, met een verloopdatum.
 8. **auth.php**: `web/auth_TEMPLATE.php` → `web/auth.php`, vul `$allowedUsers`, `$admins`, `$apiKeys`, `$exchange` en eventueel de blob-gegevens in.
-9. **Cron** (voorstel, niet ingericht): `*/5 * * * * php /…/angelia/web/worker.php >> /…/angelia/web/data/worker.log 2>&1` (paden: de page root `web/` op de server). Het draait alleen als er iets in de wachtrij staat; `--force` 's nachts herstelt handmatige wijzigingen in Exchange (drift).
+9. **Sync**: geen eigen cron. `web/hourly.php` wordt elk uur aangeroepen door `run-pages.sh` zoals bij de andere apps (toegang alleen localhost of ingelogde sessie, via `logincheck.php`). Er gebeurt alleen iets als er sinds de laatste geslaagde sync iets in Angelia gewijzigd is (opslaan, assign/unassign, banner): `version` ≠ `synced_version` in `web/data/angelia.json`. Anders komt er direct `{"ok":true,"skipped":true,…}` terug. Een lock (`web/data/sync.lock`) voorkomt dat twee syncs tegelijk lopen. Wijzigingen staan dus binnen een uur in Exchange.
 
 Eerste keer: `php web/worker.php --import` (overzicht) en `php web/worker.php --dry-run`, en pas daarna zonder `--dry-run`.
 
 Zolang `$exchange` leeg is draait alles in **mock-modus** (`web/data/mock_exchange.json` speelt dan Exchange).
 
-## Worker
+## Worker (handmatig)
+
+`hourly.php` doet de automatische sync. `worker.php` is voor handmatig gebruik op de server:
 
 ```sh
 php web/worker.php --dry-run   # wat zou er veranderen (live of mock, verandert niets)
-php web/worker.php             # wachtrij verwerken
+php web/worker.php             # sync als er iets gewijzigd is
 php web/worker.php --force     # ook met lege wachtrij (drift herstellen)
 php web/worker.php --mock      # nooit live
 php web/worker.php --import    # alleen-lezen overzicht uit Exchange → web/data/exchange_snapshot.json

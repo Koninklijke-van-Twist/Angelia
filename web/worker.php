@@ -1,8 +1,7 @@
 <?php
 
 /**
- * Sync-worker (alleen CLI). Voorstel cron (niet automatisch ingericht):
- *   * /5 * * * *  php /pad/naar/web/worker.php            (alleen als er taken in de wachtrij staan)
+ * Handmatige sync (alleen CLI). De automatische sync loopt via hourly.php (run-pages.sh).
  *
  *   php worker.php --dry-run     toon wat er zou gebeuren
  *   php worker.php --mock        nooit live, gebruikt web/data/mock_exchange.json
@@ -30,7 +29,7 @@ if (in_array('--import', $args, true)) {
 }
 
 $store = angelia_load();
-if (!$force && !$dryRun && $store['queue'] === []) {
+if (!$force && !$dryRun && !angelia_is_dirty($store)) {
     echo "Wachtrij leeg, niets te doen.\n";
     exit(0);
 }

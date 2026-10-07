@@ -119,7 +119,19 @@ if ($code !== 0) {
     $counts = array_count_values(array_column($dry['actions'], 'action'));
     check(($counts['groep_aanmaken'] ?? 0) === 2 && ($counts['regel_aanmaken'] ?? 0) === 6 && ($counts['ddg_aanmaken'] ?? 0) === 4, 'dry-run: 2 groepen, 4 DDG, 6 regels (incl. shared mailbox)');
 
+    check(angelia_is_dirty(angelia_load()), 'na wijziging: dirty');
     $run = angelia_run_sync(false, true);
+    check(!angelia_is_dirty(angelia_load()), 'na geslaagde sync: niet meer dirty');
+    $lock = fopen($tmp . '/sync.lock', 'c');
+    flock($lock, LOCK_EX);
+    try {
+        angelia_run_sync(true, true);
+        check(false, 'lock: tweede sync tegelijk geweigerd');
+    } catch (AngeliaSyncBusy) {
+        check(true, 'lock: tweede sync tegelijk geweigerd');
+    }
+    flock($lock, LOCK_UN);
+    fclose($lock);
     check($run['errors'] === [] && count($run['actions']) === count($dry['actions']), 'sync voert dezelfde acties uit');
     check(angelia_load()['queue'] === [], 'wachtrij leeg na sync');
     $again = angelia_run_sync(false, true);

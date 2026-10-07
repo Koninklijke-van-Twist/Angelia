@@ -66,6 +66,12 @@ try {
     check($c === 200 && json_decode($b, true)['changed'] === ['-kvt-monteurs', '+kvt-kantoor'], 'assign naar andere groep haalt uit de oude (max 1 groep)');
     [$c, $b] = req('POST', 'api.php?action=unassign', ['X-API-Key: onb', 'Content-Type: application/json'], '{"email":"piet@kvt.nl"}');
     check($c === 200 && json_decode($b, true)['changed'] === ['-kvt-kantoor'], 'unassign (offboarding)');
+    [$c, $b] = req('GET', 'hourly.php');
+    $j = json_decode($b, true);
+    check(is_array($j) && $j['skipped'] === false, 'hourly.php synct bij wijzigingen (mock; pwsh nodig, anders fout)'
+        . (is_array($j) && !$j['ok'] ? ' – ' . implode(' ', $j['errors']) : ''));
+    [$c, $b] = req('GET', 'hourly.php');
+    check(json_decode($b, true)['skipped'] === true, 'hourly.php daarna direct klaar (niets gewijzigd)');
     [$c] = req('GET', 'banner.php?g=../../etc');
     check($c === 404, 'banner.php weigert vreemde id');
 } finally {

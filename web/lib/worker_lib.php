@@ -8,6 +8,25 @@
  */
 function angelia_run_sync(bool $dryRun, bool $forceMock = false): array
 {
+    // Eén sync tegelijk (hourly.php, worker.php, proefrun in de UI).
+    $lock = fopen(angelia_data_dir() . '/sync.lock', 'c');
+    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+        throw new AngeliaSyncBusy('Er draait al een sync.');
+    }
+    try {
+        return angelia_run_sync_locked($dryRun, $forceMock);
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+final class AngeliaSyncBusy extends RuntimeException
+{
+}
+
+function angelia_run_sync_locked(bool $dryRun, bool $forceMock): array
+{
     $startedAt = time();
     $store = angelia_load();
     $plan = angelia_build_plan($store);
@@ -38,8 +57,10 @@ function angelia_run_sync(bool $dryRun, bool $forceMock = false): array
     }
 
     $loadedJobs = array_map('serialize', $store['queue']);
-    angelia_transaction(static function (array &$data) use ($result, $loadedJobs): void {
+    $loadedVersion = (int) ($store['version'] ?? 0);
+    angelia_transaction(static function (array &$data) use ($result, $loadedJobs, $loadedVersion): void {
         if (!$result['dry_run'] && $result['errors'] === []) {
+            $data['synced_version'] = $loadedVersion;
             // Alleen de taken die in het geladen plan zaten zijn verwerkt; nieuwere blijven staan.
             $data['queue'] = array_values(array_filter($data['queue'], static fn(array $job): bool => !in_array(serialize($job), $loadedJobs, true)));
         }
