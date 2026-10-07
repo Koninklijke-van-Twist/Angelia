@@ -76,6 +76,46 @@
         refresh();
     }
 
+    const impBtn = document.getElementById('import-exchange');
+    const impDlg = document.getElementById('import-dialog');
+    if (impBtn && impDlg) {
+        const box = document.getElementById('import-summary');
+        const ok = document.getElementById('import-confirm');
+        let keys = [];
+        const el = function (tag, text, cls) { const e = document.createElement(tag); if (text) { e.textContent = text; } if (cls) { e.className = cls; } return e; };
+        impBtn.addEventListener('click', async function () {
+            keys = []; ok.disabled = true; box.textContent = 'Bezig met ophalen uit Exchange…';
+            impDlg.showModal();
+            const json = await post('import_preview', new FormData());
+            if (!json.ok) { box.textContent = json.error || 'Ophalen mislukt.'; return; }
+            box.textContent = '';
+            box.appendChild(el('p', 'Opgehaald ' + json.at_text + '.', 'muted'));
+            let total = 0;
+            (json.summary || []).forEach(function (c) {
+                box.appendChild(el('h4', c.company + (c.groups.length ? ' – ' + c.groups.length + ' groep(en)' : '')));
+                const ul = el('ul');
+                c.groups.forEach(function (g) { total++; ul.appendChild(el('li', g.name + ': ' + g.members + ' leden' + (g.shared ? ', ' + g.shared + ' shared mailbox(es)' : ''))); });
+                c.skipped.forEach(function (s) { ul.appendChild(el('li', 'Overgeslagen: ' + s.rule + ' – ' + s.reason, 'muted')); });
+                c.conflicts.forEach(function (x) { ul.appendChild(el('li', 'Niet toegevoegd: ' + x.email + ' (' + x.rule + ') zit al in ' + x.group, 'notice warn')); });
+                box.appendChild(ul);
+            });
+            if (total === 0) { box.appendChild(el('p', 'Er is niets nieuws om te importeren.')); return; }
+            keys = json.keys || [];
+            ok.disabled = false;
+        });
+        ok.addEventListener('click', async function (ev) {
+            ev.preventDefault();
+            ok.disabled = true;
+            const data = new FormData();
+            keys.forEach(function (k) { data.append('keys[]', k); });
+            const json = await post('import_groups', data);
+            if (!json.ok) { window.alert(json.error || 'Importeren mislukt.'); ok.disabled = false; return; }
+            impDlg.close();
+            window.alert(json.report.created.length + ' groep(en) aangemaakt (uitgeschakeld).');
+            window.location.reload();
+        });
+    }
+
     const dry = document.getElementById('dry-run');
     if (dry) {
         dry.addEventListener('click', async function () {

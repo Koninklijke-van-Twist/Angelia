@@ -210,6 +210,14 @@ check(angelia_member_conflicts($imp) === [], 'na import geen dubbele adressen');
 $again = angelia_import_apply($imp, $snapImp, array_column(angelia_import_candidates($snapImp, $imp), 'key'), 'test');
 check($again['created'] === [], 'tweede import maakt niets dubbel');
 
+$sim = angelia_default_store();
+angelia_save_group($sim, ['name' => 'Bestaand', 'company_id' => 'kvt', 'html' => '<p>{{naam}}</p>', 'members' => 'al@kvt.nl'], 'test');
+$plan = angelia_import_apply($sim, $snapImp, array_column(angelia_import_candidates($snapImp, $sim), "key"), "test");
+$sum = angelia_import_summary($sim, $plan);
+$sumBy = array_column($sum, null, 'company');
+check(count($sumBy['KVT']['groups']) === 1 && $sumBy['KVT']['groups'][0]['members'] === 2, 'samenvatting per bedrijf: KVT 1 groep, 2 leden');
+check(count($sumBy['KVT Germany']['groups']) === 1 && count($sumBy['Overgeslagen']['skipped']) === 2, 'samenvatting: KVT Germany + overgeslagen');
+
 exec('rm -rf ' . escapeshellarg($tmp));
 echo $failures === 0 ? "\nAlle tests geslaagd.\n" : "\n{$failures} test(s) mislukt.\n";
 exit($failures === 0 ? 0 : 1);
