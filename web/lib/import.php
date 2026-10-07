@@ -185,3 +185,33 @@ function angelia_import_apply(array &$store, array $snapshot, array $keys, strin
     }
     return $result;
 }
+
+/**
+ * Plan/resultaat van angelia_import_apply per bedrijf (voor het bevestigingsvenster).
+ * @return array<int, array{company: string, groups: array<int, array{id: string, name: string, members: int, shared: int}>, skipped: array, conflicts: array}>
+ */
+function angelia_import_summary(array $store, array $plan): array
+{
+    $out = [];
+    $add = static function (string $company) use (&$out): void {
+        $out[$company] ??= ['company' => $company, 'groups' => [], 'skipped' => [], 'conflicts' => []];
+    };
+    foreach ($plan['created'] as $c) {
+        $g = angelia_group($store, $c['id']);
+        $name = angelia_company($store, $g['company_id'])['name'] ?? $g['company_id'];
+        $add($name);
+        $out[$name]['groups'][] = ['id' => $g['id'], 'name' => $g['name'], 'members' => count($g['members']), 'shared' => count($g['shared_mailboxes'])];
+    }
+    foreach ($plan['conflicts'] as $c) {
+        $g = angelia_group($store, $c['group']);
+        $name = angelia_company($store, $g['company_id'] ?? '')['name'] ?? 'Overig';
+        $add($name);
+        $out[$name]['conflicts'][] = $c;
+    }
+    foreach ($plan['skipped'] as $s) {
+        $add('Overgeslagen');
+        $out['Overgeslagen']['skipped'][] = $s;
+    }
+    ksort($out);
+    return array_values($out);
+}

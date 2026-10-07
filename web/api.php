@@ -13,7 +13,7 @@
  *
  * Met Entra-sessie (UI, beheerders, CSRF): save_company, delete_company, save_group, delete_group,
  * upload_banner, preview, dry_run, import (alleen-lezen overzicht uit Exchange),
- * import_groups (keys[] uit het overzicht → uitgeschakelde Angelia-groepen; verandert niets in Exchange-regels).
+ * import_preview (ophalen + plan per bedrijf), import_groups (keys[] uit het overzicht → uitgeschakelde Angelia-groepen; verandert niets in Exchange-regels).
  */
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/lib/bootstrap.php';
@@ -109,6 +109,12 @@ try {
         case 'import':
             $snap = angelia_import_snapshot();
             angelia_json(['ok' => true, 'groups' => count($snap['groups']), 'rules' => count($snap['rules'])]);
+        case 'import_preview':
+            $snap = angelia_import_snapshot();
+            $sim = angelia_load();
+            $plan = angelia_import_apply($sim, $snap, array_column(angelia_import_candidates($snap, $sim), 'key'), $actor);
+            angelia_json(['ok' => true, 'at_text' => angelia_format_datetime($snap['at']), 'summary' => angelia_import_summary($sim, $plan)]
+                + ['keys' => array_column(angelia_import_candidates($snap, angelia_load()), 'key')]);
         case 'import_groups':
             $snap = angelia_load_snapshot();
             if ($snap === null) {
