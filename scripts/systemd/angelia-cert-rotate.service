@@ -1,0 +1,13 @@
+[Unit]
+Description=Angelia: Exchange-app-certificaat roteren
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/angelia-cert-rotate.sh
+Environment=ANGELIA_CERT_CONFIG=/etc/angelia/cert-rotate.env
+# root nodig voor chown naar www-data
+User=root
+PrivateTmp=true
+NoNewPrivileges=true

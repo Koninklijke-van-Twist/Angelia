@@ -1,0 +1,20 @@
+body { font-family: Verdana, Geneva, sans-serif; margin: 0; background: #f4f6f9; color: #1d2b3a; font-size: 14px; }
+.top { background: #00529B; color: #fff; padding: 12px 24px; display: flex; gap: 16px; align-items: baseline; }
+.top h1 { margin: 0; font-size: 22px; } .top a { color: #fff; text-decoration: none; }
+.top .me { margin-left: auto; font-size: 12px; opacity: .85; }
+main { max-width: 1300px; margin: 0 auto; padding: 16px 24px; }
+.panel { background: #fff; border-radius: 6px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+h3 small { color: #667; font-weight: normal; margin-left: 6px; }
+table.list { border-collapse: collapse; width: 100%; } table.list th, table.list td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e3e7ec; }
+.muted { color: #667; } .notice { background: #e8f1fa; border-left: 4px solid #0099CC; padding: 8px 12px; } .notice.warn, li.warn { background: #fff4e5; border-left-color: #e08a00; }
+.tag { padding: 2px 8px; border-radius: 10px; font-size: 12px; } .tag.on { background: #dff3e4; color: #1b6b34; } .tag.off { background: #eceff3; color: #556; }
+button, .btn { background: #00529B; color: #fff; border: 0; border-radius: 4px; padding: 6px 12px; cursor: pointer; text-decoration: none; font-size: 13px; }
+.btn.small { font-size: 12px; padding: 3px 8px; margin-left: 8px; } button.danger { background: #b3261e; } button:disabled { opacity: .5; }
+.actions form { display: inline; }
+.editor .cols { display: grid; grid-template-columns: 1fr 2fr; gap: 24px; }
+.editor label { display: block; margin-bottom: 12px; } .editor label.inline { display: flex; gap: 6px; align-items: center; }
+.editor input:not([type=checkbox]):not([type=color]), .editor select, .editor textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px; }
+#html { font-family: Consolas, monospace; font-size: 12px; }
+.placeholders ul { list-style: none; padding: 0; columns: 2; } .placeholders button { background: #eceff3; color: #1d2b3a; font-family: monospace; padding: 2px 6px; }
+.inline-form { margin: 12px 0; }
+#preview { width: 100%; height: 480px; border: 1px solid #d5dbe2; background: #fff; }
