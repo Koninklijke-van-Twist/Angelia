@@ -184,3 +184,9 @@ bash tests/cert_rotate_test.sh   # certificaatrotatie tegen nep-Graph
 bash tests/setup_server_test.sh  # setup-server.sh in een tijdelijke map (zonder root/systemctl)
 php tests/api_access_test.php    # start php -S op een tijdelijke kopie van web/: UI, CSRF, API-sleutels, scopes
 ```
+
+## Gebruikersbeheer
+
+> Let op: dit panel beheert wie de app mag **openen** (`\$allowedUsers` / SQLite). Angelia’s bestaande `\$admins` (schrijfrechten Exchange/UI) blijft apart.
+
+Vaste admins (`opesket@kvt.nl`, `tfalken@kvt.nl`, `milanscheenloop@kvt.nl`) beheren de allowlist via `admin_users.php`. Die lijst staat in `web/data/access.sqlite`. Zolang die tabel leeg is, geldt `$allowedUsers` uit `auth.php`.
