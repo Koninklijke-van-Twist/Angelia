@@ -3,3 +3,5 @@ web/data/
 !web/data/.htaccess
 /data/
 .phpunit*
+web/analytics/analytics.sqlite
+web/analytics/analytics.sqlite-*
