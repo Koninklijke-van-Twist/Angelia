@@ -72,6 +72,38 @@ function analytics_authorize(string $email, string $apiKey, string $oid): bool
     return function_exists('verify_rotating_api_key') && verify_rotating_api_key($oid, $apiKey);
 }
 
+/**
+ * Scherm sqlite-bestanden in web/analytics/ af zonder analytics.php te blokkeren.
+ * Zelfde aanpak als kvt_protect_dirs.php: ontbrekende .htaccess aanmaken, en een
+ * bestaande .htaccess alleen aanvullen als daar nog geen sqlite-regel in staat.
+ */
+function analytics_ensure_htaccess(?string $dir = null): void
+{
+    $dir = $dir ?? dirname(ANALYTICS_DB_PATH);
+    if (!is_dir($dir)) {
+        return;
+    }
+
+    $htaccess = $dir . '/.htaccess';
+    $deny = "Options -Indexes\n"
+        . "<FilesMatch \"\\.(sqlite|sqlite3|db)(-wal|-shm|-journal)?$\">\n"
+        . "    <IfModule mod_authz_core.c>\n        Require all denied\n    </IfModule>\n"
+        . "    <IfModule !mod_authz_core.c>\n        Order allow,deny\n        Deny from all\n    </IfModule>\n"
+        . "</FilesMatch>\n";
+
+    $current = is_file($htaccess) ? (string) @file_get_contents($htaccess) : null;
+    if ($current === null) {
+        if (is_writable($dir)) {
+            @file_put_contents($htaccess, $deny, LOCK_EX);
+        }
+        return;
+    }
+
+    if (stripos($current, 'sqlite') === false && is_writable($htaccess)) {
+        @file_put_contents($htaccess, rtrim($current) . "\n\n" . $deny, LOCK_EX);
+    }
+}
+
 function analytics_ensure_db_writable(): void
 {
     $dir = dirname(ANALYTICS_DB_PATH);
@@ -84,6 +116,8 @@ function analytics_ensure_db_writable(): void
     if (!is_writable($dir)) {
         throw new RuntimeException('Analytics directory is not writable');
     }
+
+    analytics_ensure_htaccess($dir);
 
     if (!is_file(ANALYTICS_DB_PATH)) {
         $created = @touch(ANALYTICS_DB_PATH);
@@ -180,6 +214,12 @@ function analytics_record_visit(string $email): void
 /**
  * Page load
  */
+
+if (defined('ANALYTICS_LIBRARY_ONLY')) {
+    return;
+}
+
+analytics_ensure_htaccess();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET' && ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     analytics_json(['ok' => false, 'error' => 'Method not allowed'], 405);

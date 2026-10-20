@@ -51,6 +51,8 @@ jobs:
             --exclude-glob .htaccess \
             --exclude-glob cache/** \
             --exclude-glob data/** \
+            --exclude-glob analytics/*.sqlite \
+            --exclude-glob analytics/*.sqlite-* \
             --exclude-glob auth.php \
             ./web .
 
